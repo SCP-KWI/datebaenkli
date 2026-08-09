@@ -66,9 +66,12 @@
              is the no-script fallback. -->
         <button id="theme" type="button" class="icon-btn mi"
                 aria-label="Auf dunkles Design wechseln"></button>
-        <!-- The handbook. Shown to everyone, including students, who currently get
-             the teacher's manual: a student handbook is coming and will be linked
-             here instead. `mountNav()` is the one place that will need to branch. -->
+        <!-- The handbook, and there are two of them. The markup carries the staff
+             one and `mountNav()` swaps in `/handbuch-lernende` for a student: the
+             `href` cannot branch here without breaking the identical bar above,
+             which is the trade this whole block is built on. New tab, so a page
+             behind this one survives. No `data-i18n` — both documents are German
+             only, and `login.html` carries that argument. -->
         <a id="help" class="btn icon-btn help-link" href="/handbuch" target="_blank"
            rel="noopener" aria-label="Handbuch öffnen (neues Fenster)"
            title="Handbuch öffnen (neues Fenster)">?</a>

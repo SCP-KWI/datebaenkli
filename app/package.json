@@ -1,6 +1,6 @@
 {
   "name": "datebaenkli",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "postbuild": "mkdir -p dist/db && cp -R src/db/sql dist/db/ && cp -R src/web dist/ && cp ../docs/handbuch.html dist/web/ && rm dist/web/assets/editor.entry.js && npm run bundle:editor && node tools/stamp-build.mjs",
+    "postbuild": "mkdir -p dist/db && cp -R src/db/sql dist/db/ && cp -R src/web dist/ && cp ../docs/handbuch.html ../docs/handbuch-lernende.html dist/web/ && rm dist/web/assets/editor.entry.js && npm run bundle:editor && node tools/stamp-build.mjs",
     "bundle:editor": "esbuild src/web/assets/editor.entry.js --bundle --format=esm --minify --sourcemap --target=es2022 --outfile=dist/web/assets/editor.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "node --watch --experimental-strip-types src/server.ts",

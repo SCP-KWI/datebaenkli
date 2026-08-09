@@ -1,5 +1,10 @@
-// Builds the standalone handbook: inlines fonts, screenshots and the numbered
-// arrow overlays into a single HTML file.
+// Builds the standalone handbooks: inlines the shared stylesheet, the fonts,
+// the screenshots and the numbered arrow overlays into one HTML file each.
+//
+// There are two documents and one of everything else. `handbuch.css` is the
+// shared look (its own header says why it is a file rather than two copies),
+// and the figure machinery below is used by the teacher's handbook only — the
+// student one carries no `{{FIG:}}` at all and says at its top why not.
 import { readFileSync, writeFileSync } from "node:fs";
 
 const SP = new URL("./", import.meta.url).pathname;   // docs/handbook-src/
@@ -114,13 +119,34 @@ if (fonts.split("@font-face").length - 1 !== KEEP.length) {
 }
 
 // ---- assemble --------------------------------------------------------------
-let html = readFileSync(`${SP}handbuch.src.html`, "utf8");
-html = html.replace(/\{\{FONTS\}\}/g, fonts);
-html = html.replace(/\{\{FIG:([a-z0-9-]+)\}\}/g, (_, k) => figure(k));
+const style = readFileSync(`${SP}handbuch.css`, "utf8");
 
-const left = html.match(/\{\{[^}]+\}\}/g);
-if (left) throw new Error(`unreplaced placeholders: ${left.join(", ")}`);
+// `{{STYLE}}` first: the stylesheet is where `{{FONTS}}` lives, so substituting
+// fonts before it would leave the placeholder inside the freshly-inserted CSS
+// and the check at the bottom would be the thing that told you.
+const DOCUMENTS = [
+  { src: "handbuch.src.html", out: "handbuch.html" },
+  { src: "handbuch-lernende.src.html", out: "handbuch-lernende.html" },
+];
 
-const out = `${REPO}docs/handbuch.html`;
-writeFileSync(out, html);
-console.log(`wrote ${out} — ${(html.length / 1024 / 1024).toFixed(2)} MB`);
+for (const doc of DOCUMENTS) {
+  let html = readFileSync(`${SP}${doc.src}`, "utf8");
+  html = html.replace(/\{\{STYLE\}\}/g, () => style);
+  html = html.replace(/\{\{FONTS\}\}/g, () => fonts);
+  html = html.replace(/\{\{FIG:([a-z0-9-]+)\}\}/g, (_, k) => figure(k));
+
+  const left = html.match(/\{\{[^}]+\}\}/g);
+  if (left) throw new Error(`${doc.src}: unreplaced placeholders: ${left.join(", ")}`);
+
+  // The handbooks are served under a relaxed CSP (`server.ts`), and the one
+  // thing that exemption does *not* relax is `script-src 'none'` — on the
+  // stated grounds that these documents contain no script and never will.
+  // This is where that claim stops being a comment.
+  if (/<script[\s>]/i.test(html)) {
+    throw new Error(`${doc.src}: a script got in — see HANDBOOK_CSP in server.ts`);
+  }
+
+  const out = `${REPO}docs/${doc.out}`;
+  writeFileSync(out, html);
+  console.log(`wrote ${out} — ${(html.length / 1024 / 1024).toFixed(2)} MB`);
+}

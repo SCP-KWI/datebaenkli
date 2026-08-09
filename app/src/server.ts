@@ -249,22 +249,24 @@ const CSP = [
 ].join('; ');
 
 /**
- * `/handbuch` only — the one response that is a *document* rather than part of
- * the app shell, and the only place the policy above is relaxed.
+ * The two handbooks only — the responses that are *documents* rather than part
+ * of the app shell, and the only place the policy above is relaxed.
  *
- * The handbook is generated outside this repo's front end
- * (`docs/handbook-src/build.mjs`) and is deliberately one self-contained file:
- * its twelve screenshots and its two webfonts are `data:` URIs. `font-src
- * 'self'` therefore blocks every face in it, and it carries two `style=`
- * attributes that `style-src-attr 'none'` blocks. Neither is a security
- * property worth the document rendering in a fallback face, and neither is
- * fixable from here — the generator is shared with the sister apps.
+ * They are generated outside this repo's front end
+ * (`docs/handbook-src/build.mjs`) and are deliberately self-contained files:
+ * the teacher's twelve screenshots and both documents' webfonts are `data:`
+ * URIs. `font-src 'self'` therefore blocks every face in them, and the
+ * teacher's carries two `style=` attributes that `style-src-attr 'none'`
+ * blocks. Neither is a security property worth the document rendering in a
+ * fallback face, and neither is fixable from here — the generator is shared
+ * with the sister apps.
  *
  * What is *not* relaxed is the half that matters: `script-src 'none'`, which is
- * stricter than the app's own `'self'`. The handbook contains no script and
- * never will, so anything trying to run in it is an injection. Everything else
- * — `default-src 'self'`, `frame-ancestors`, `base-uri`, `object-src` — is
- * carried over unchanged.
+ * stricter than the app's own `'self'`. The handbooks contain no script and
+ * never will — `build.mjs` refuses to emit one that does, so that sentence is
+ * checked rather than merely asserted — and anything trying to run in one is
+ * therefore an injection. Everything else — `default-src 'self'`,
+ * `frame-ancestors`, `base-uri`, `object-src` — is carried over unchanged.
  *
  * This is the exemption the main policy's header warns about, made once, by
  * URL, for a page that is not ours to fix. **Do not widen it to the app**: the
@@ -284,12 +286,23 @@ const HANDBOOK_CSP = [
   "object-src 'none'",
 ].join('; ');
 
+/**
+ * The routes that get `HANDBOOK_CSP`. A `Set` rather than a second `===`,
+ * because the second document was where the single comparison would have been
+ * copied — and a handbook served under the app's own policy does not fail
+ * loudly, it renders in a fallback face and nobody files it as a bug.
+ */
+const HANDBOOK_URLS = new Set(['/handbuch', '/handbuch-lernende']);
+
 app.addHook('onSend', async (req, reply) => {
   // `routeOptions.url` and not `req.url`, so a `/handbuch?print` still gets the
   // policy the document needs rather than the one that breaks its fonts.
   void reply.header(
     'content-security-policy',
-    req.routeOptions.url === '/handbuch' ? HANDBOOK_CSP : CSP,
+    // `?? ''` because a 404 has no matched route and `url` is therefore
+    // optional — an unmatched request is not a handbook, so it gets the app's
+    // own policy, which is the strict one.
+    HANDBOOK_URLS.has(req.routeOptions.url ?? '') ? HANDBOOK_CSP : CSP,
   );
   void reply.header('x-content-type-options', 'nosniff');
   void reply.header('x-frame-options', 'DENY');
@@ -529,30 +542,45 @@ async function start(): Promise<void> {
   );
 
   /**
-   * The teacher handbook — `docs/handbuch.html`, one self-contained document.
+   * The handbooks — `docs/handbuch.html` for staff and
+   * `docs/handbuch-lernende.html` for students, one self-contained document
+   * each.
    *
-   * Here rather than in `routes/pages.ts` because it is not one of the app's
+   * Here rather than in `routes/pages.ts` because they are not one of the app's
    * pages: those are read into memory at boot and sent as constants, which is
    * right for 4 kB shells and wrong for 1.1 MB of embedded screenshots and
-   * fonts. `sendFile` streams it and gives it `send`'s mtime/size ETag, so the
-   * second visit is a 304 rather than another megabyte.
+   * fonts. `sendFile` streams them and gives them `send`'s mtime/size ETag, so
+   * the second visit is a 304 rather than another megabyte.
    *
-   * The second argument overrides the plugin's `root` for this one call — the
-   * registration above points at `web/assets`, and the handbook is a document,
+   * The second argument overrides the plugin's `root` for these calls — the
+   * registration above points at `web/assets`, and a handbook is a document,
    * not an asset. No path comes from the request, so there is nothing to
-   * traverse with; this is a fixed filename under a fixed root.
+   * traverse with; these are fixed filenames under a fixed root.
    *
    * `public`, deliberately and not by omission: a teacher who has forgotten how
    * to hand out access needs the handbook *before* she can log in, which is
    * exactly when she has no session. It is the same argument the pages make —
-   * program text, not data about anyone.
+   * program text, not data about anyone. The student one is `public` for a
+   * thinner reason and the same one: it says nothing that is not already on
+   * the login page, and gating it would mean a student who cannot get in also
+   * cannot read the page telling her how.
    *
-   * The single source is `docs/handbuch.html`, generated by
-   * `docs/handbook-src/build.mjs`. `postbuild` copies it into `dist/web/`,
-   * which is gitignored, so there is no second checked-in copy to drift.
+   * **Two routes and not one with a parameter.** `/handbuch/:who` would put a
+   * request-supplied string into a filename, and the whole argument above is
+   * that no path comes from the request. Two literals cost one line.
+   *
+   * The single sources are `docs/handbuch.html` and
+   * `docs/handbuch-lernende.html`, generated by `docs/handbook-src/build.mjs`.
+   * `postbuild` copies both into `dist/web/`, which is gitignored, so there is
+   * no second checked-in copy to drift. Both are listed in `HANDBOOK_URLS`
+   * above; a third would go in all three places.
    */
   app.get('/handbuch', { config: { public: true } }, async (_req, reply) =>
     reply.sendFile('handbuch.html', join(import.meta.dirname, 'web')),
+  );
+
+  app.get('/handbuch-lernende', { config: { public: true } }, async (_req, reply) =>
+    reply.sendFile('handbuch-lernende.html', join(import.meta.dirname, 'web')),
   );
 
   startPoolSweeper();

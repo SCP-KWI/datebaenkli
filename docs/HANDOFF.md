@@ -3,10 +3,15 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the
-server serves `0.10.0` and the repo is on **`0.10.3`, which is not deployed** —
-§11 (the usability pass), §12 (two things the author found while testing it)
-and §13 (the top bar, made one bar), and together they are the only undeployed
-code.
+server serves `0.10.0` and the repo is on **`0.10.4`, which is not deployed** —
+§11 (the usability pass), §12 (two things the author found while testing it),
+§13 (the top bar, made one bar) and §14 (the student handbook, which is the
+placeholder §13 left), and together they are the only undeployed code.
+
+**§14 got its own number rather than folding into §13's**, because §13 was
+already committed when it landed and `curl /api/version` is how a deploy is
+proved (§7). Two changesets under one version is exactly the confusion the top
+of this file was wrong about twice.
 
 **The demo is ON in production, and §9 still says it shipped dark.** Curled
 today: `/api/demo` answers `{"enabled":true,"leaseMinutes":30}` and `builtAt` is
@@ -5225,3 +5230,78 @@ makes an exercise read as "you are in the editor" rather than as nowhere.
 **Still not verified: mobile.** Everything above is desktop widths. The bar wraps
 rather than overflows, which is the right failure, but nobody has looked at any
 of this on a phone.
+
+---
+
+## 14. The student handbook — 0.10.4 (2026-08-09, NOT DEPLOYED)
+
+§13 left a placeholder: the `?` was on `/sql` and `/uebungen` for the first
+time, it opened the teacher's manual, and the comment in the markup said a
+student handbook was coming and `mountNav()` would be the one place to branch.
+This is that, and the branch is one line where the comment said it would be.
+
+`docs/handbuch-lernende.html`, served at **`/handbuch-lernende`**, `public` for
+the same reason `/handbuch` is. Nine sections: what it is, logging in, the page
+in a minute, a first query, reading an error, own tables and CSV, exercises,
+limits and who-sees-what, and a FAQ. «Du» throughout, aimed at a Gymnasium
+class that has not typed SQL before — it documents **the app, not SQL**, which
+is the line that keeps it short.
+
+### 14a. Three things that were structural rather than editorial
+
+**One stylesheet, not two.** The 270-line `<style>` block moved out of
+`handbuch.src.html` into `handbuch.css`, and `build.mjs` substitutes it for a
+`{{STYLE}}` placeholder in each source. Copying it would have been the exact
+shape `test/chalk.test.mjs` exists to catch elsewhere — two copies of a design
+system that drift, invisibly, because nobody ever puts the two documents side
+by side. Verified by rebuilding: the teacher's output is byte-identical apart
+from the new file's own header comment.
+
+**No screenshots, deliberately.** `shots.mjs` drives the app as a *teacher*, so
+`09-csv`, `10-editor` and `11-fehler` all show a table tree containing a whole
+class's schemas — something a student never sees. On top of that every existing
+shot has the pre-§13 bar in it. Borrowing one would not have been merely stale,
+it would have shown the wrong role. The README says what a follow-up needs (a
+second `shots.mjs` pass signed in as a student of the demo class). This is the
+same call the README already makes for chapter 10 of the teacher's handbook.
+
+**`HANDBOOK_URLS` is a `Set`, not a second `===`.** The CSP exemption in
+`server.ts`'s `onSend` hook keyed off one URL. A handbook served under the app's
+own policy does not fail loudly — it renders in a fallback face, and nobody
+files that. `build.mjs` now also refuses to emit a document containing a
+`<script>`, which turns `script-src 'none'`'s justifying comment into a check.
+
+### 14b. The branch, and why it is in `mountNav()`
+
+```js
+const HANDBOOK = { student: '/handbuch-lernende' };
+```
+
+The bar's markup is byte-identical on all five pages and there is a test that
+says so, so the `href` cannot branch in the HTML. The markup therefore carries
+`/handbuch` — right for a teacher, an admin, and any role that turns up later
+without an entry — and only `student` is rehung at runtime. `title` and
+`aria-label` are left alone: "Handbuch öffnen" is true either way, and a second
+owner for a label the markup already sets is the trap `app.css`'s banner
+records.
+
+The teacher's handbook gained a box in §8 pointing at the student one, and
+saying the `?` already routes a student there — so there is nothing to hand out.
+
+### 14c. Verified
+
+Against a real server (throwaway cluster, port 3122), with a teacher, a class
+and a student created through the API:
+
+- `GET /handbuch-lernende` → 200, `HANDBOOK_CSP` (`script-src 'none'`), no
+  session required. `/handbuch` unchanged. `/sql` still gets the app's stricter
+  policy — the exemption did not leak.
+- Signed in as `u_i3a_buehler_nino`: the `?` resolves to `/handbuch-lernende` on
+  `/`, `/sql` and `/uebungen`. Signed in as `t_testerin` on `/sql`: `/handbuch`.
+- The document itself: renders in light and dark, five embedded faces load,
+  **zero `<script>` and zero `style=`** (stricter than the teacher's, which has
+  two of the latter), and at 375 px nothing overflows horizontally — the two
+  tables scroll inside their `.tablewrap`.
+
+**Not verified:** print. The teacher's handbook has a `@media print` block that
+both documents now share, and nobody has sent this one to a printer.

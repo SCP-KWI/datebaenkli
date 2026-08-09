@@ -1,25 +1,51 @@
 # Handbuch-Generator
 
-Baut `../handbuch.html` — das Handbuch für Lehrpersonen als eine einzige,
-selbsttragende Datei. Fonts, Screenshots und Pfeil-Overlays sind eingebettet;
-die einzigen externen URLs sind drei Seiten der PostgreSQL-Dokumentation, eine
+Baut **zwei** Dateien, jede selbsttragend:
+
+| Ausgabe | Route | Für wen |
+|---|---|---|
+| `../handbuch.html` | `/handbuch` | Lehrpersonen. Fonts, Screenshots und Pfeil-Overlays eingebettet. |
+| `../handbuch-lernende.html` | `/handbuch-lernende` | Lernende. Kurz, ohne Abbildungen — siehe unten. |
+
+Die einzigen externen URLs sind drei Seiten der PostgreSQL-Dokumentation, eine
 Markdown-Kurzreferenz (Kapitel 10) und die Adresse der App selbst.
 
 Es ist bewusst eine eigene Datei und kein Abschnitt in `docs/`: `API.md`,
 `ARCHITECTURE.md` und `HANDOFF.md` richten sich an Leute, die den Code ändern.
-Dieses hier richtet sich an Leute, die unterrichten, und nimmt nichts als
-bekannt an.
+Diese hier richten sich an Leute, die unterrichten beziehungsweise lernen, und
+nehmen nichts als bekannt an.
+
+**Welches Handbuch der `?`-Knopf in der App öffnet, entscheidet `mountNav()` in
+`app/src/web/assets/util.js`** — die Leiste selbst ist auf allen fünf Seiten
+byte-identisch (`test/pages.test.mjs`), also steht im Markup die
+Lehrpersonen-Fassung und nur die Rolle `student` wird umgehängt.
 
 ## Nur Text ändern
 
-Der ganze Inhalt steht in `handbuch.src.html`. Danach:
+Der Inhalt steht in `handbuch.src.html` und `handbuch-lernende.src.html`, das
+gemeinsame Aussehen in `handbuch.css`. Danach:
 
 ```bash
 node build.mjs
 ```
 
-Das genügt, solange sich die Screenshots nicht ändern: `shots/rects.json` und
-`shots/web/*.webp` liegen mit im Repo, die App muss dafür nicht laufen.
+Der Lauf baut immer beide Dokumente. Das genügt, solange sich die Screenshots
+nicht ändern: `shots/rects.json` und `shots/web/*.webp` liegen mit im Repo, die
+App muss dafür nicht laufen.
+
+## Das Lernenden-Handbuch hat keine Abbildungen
+
+Und das ist eine Entscheidung, keine Lücke. `shots.mjs` fährt die App als
+**Lehrperson** ab; die drei Aufnahmen, die inhaltlich passen würden (`09-csv`,
+`10-editor`, `11-fehler`), zeigen deshalb einen Tabellenbaum mit den Bereichen
+einer ganzen Klasse darin — etwas, das eine Lernende nie zu sehen bekommt. Dazu
+kommt die Leiste: seit 0.10.3 ist sie auf allen Seiten dieselbe, und auf jedem
+vorhandenen Screenshot ist es noch die alte.
+
+Wer das nachholen will, braucht einen zweiten Durchlauf in `shots.mjs`,
+angemeldet als eine Lernende der Demo-Klasse (`demo_seed.mjs` legt sie an und
+schreibt ihr Passwort nach `shots/demo.json`). Nützlich wären zwei Aufnahmen:
+der Editor mit einem Ergebnis, und der Übungsbalken darüber.
 
 ## Kapitel 10 hat noch keine Abbildung
 
@@ -59,8 +85,10 @@ Der Lauf dauert rund zweieinhalb Minuten, davon geht die Hälfte an
 
 | Datei | Zweck |
 |---|---|
-| `handbuch.src.html` | Inhalt und Chalk-Styling. `{{FIG:name}}` und `{{FONTS}}` sind die Platzhalter; ein übrig gebliebener bricht den Build ab. |
-| `build.mjs` | Setzt die Datei zusammen: Fonts einbetten, Bilder als Data-URI, Pfeile als SVG. Die Zuschnitte der Abbildungen stehen oben in `FIGURES`. |
+| `handbuch.src.html` | Inhalt des Lehrpersonen-Handbuchs. Platzhalter: `{{STYLE}}`, `{{FONTS}}`, `{{FIG:name}}`; ein übrig gebliebener bricht den Build ab. |
+| `handbuch-lernende.src.html` | Inhalt des Lernenden-Handbuchs. Nur `{{STYLE}}` — keine Abbildungen. |
+| `handbuch.css` | Das Aussehen **beider** Dokumente, an einer Stelle. Enthält `{{FONTS}}`. |
+| `build.mjs` | Setzt beide Dateien zusammen: Stylesheet und Fonts einbetten, Bilder als Data-URI, Pfeile als SVG. Die Zuschnitte der Abbildungen stehen oben in `FIGURES`. Bricht ab, wenn ein `<script>` im Ergebnis steht — `server.ts` verspricht `script-src 'none'`. |
 | `shots.mjs` | Fährt die App ab und schreibt `shots/*.png` **plus** `shots/rects.json` — die Bounding-Boxen der markierten Elemente, aus denen `build.mjs` die Pfeile berechnet. Welche Elemente nummeriert werden, steht in den `shot(...)`-Aufrufen. |
 | `demo_seed.mjs` | Die Demo-Klasse: eine Lehrperson, sieben Lernende, und was sie in einer Lektion angestellt haben. Läuft über die HTTP-API der App, damit nichts an einer Route vorbei erfunden wird. |
 | `kioskumsatz.csv` | Die Datei, die im CSV-Abschnitt importiert wird. Schweizer Excel-Dialekt, mit Absicht. |

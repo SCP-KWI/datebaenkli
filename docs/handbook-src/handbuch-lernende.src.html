@@ -1,0 +1,354 @@
+<!doctype html>
+<!--
+  Das Handbuch für Lernende — zweites Dokument desselben Generators.
+
+  **Es hat mit Absicht keine Abbildungen.** Nicht aus Eile: `shots.mjs` fährt
+  die App als *Lehrperson* ab, und die drei Aufnahmen, die hier zu passen
+  scheinen (`09-csv`, `10-editor`, `11-fehler`), zeigen deshalb einen
+  Tabellenbaum mit den Bereichen einer ganzen Klasse darin — etwas, das eine
+  Lernende nie sieht. Dazu kommt die Leiste: seit 0.10.3 ist sie auf allen fünf
+  Seiten dieselbe, und auf jedem vorhandenen Screenshot ist es die alte. Eine
+  geliehene Abbildung wäre hier also nicht bloss ungenau, sondern würde die
+  falsche Rolle zeigen.
+
+  Der README-Abschnitt zu Kapitel 10 des Lehrpersonen-Handbuchs sagt dasselbe
+  in einem anderen Fall: eine fehlende Abbildung ist ehrlicher als eine
+  erfundene. Wer das nachholen will, braucht einen zweiten Durchlauf in
+  `shots.mjs`, angemeldet als eine Lernende der Demo-Klasse — der Ablauf dafür
+  existiert noch nicht.
+
+  Ton: «du», kurze Sätze, keine Anrede an eine Klasse. Zielgruppe sind
+  Gymnasiastinnen und Gymnasiasten, die zum ersten Mal SQL tippen — nicht
+  Anfängerinnen im Umgang mit einem Browser. Das Dokument erklärt die App,
+  **nicht SQL**; das ist die Grenze, an der es kurz bleibt.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datebänkli — Handbuch für Lernende</title>
+<meta name="description" content="Kurzanleitung zu Datebänkli für Lernende: anmelden, SQL schreiben, Fehler lesen, Übungen abgeben.">
+<style>
+{{STYLE}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <div class="brand">
+    <span class="brand-badge" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/>
+      </svg>
+    </span>
+    <span class="brand-name">Datebänkli</span>
+  </div>
+  <h1>Handbuch für Lernende</h1>
+  <p class="lede">Du hast eine eigene Datenbank. Sie läuft im Browser, du musst nichts installieren, und du kannst darin nichts kaputt machen, was nicht dir gehört.</p>
+  <p class="meta">Stand: August 2026 · Version 0.10.4 · Für Lehrpersonen gibt es <a href="/handbuch">ein eigenes Handbuch</a></p>
+</header>
+
+<nav class="toc" aria-label="Inhalt">
+  <h2>Inhalt</h2>
+  <ol>
+    <li><span class="num">1</span><a href="#was">Was das hier ist</a></li>
+    <li><span class="num">2</span><a href="#anmelden">Anmelden</a></li>
+    <li><span class="num">3</span><a href="#seite">Die Seite in einer Minute</a></li>
+    <li><span class="num">4</span><a href="#erste">Deine erste Abfrage</a></li>
+    <li><span class="num">5</span><a href="#fehler">Wenn ein Fehler kommt</a></li>
+    <li><span class="num">6</span><a href="#eigene">Eigene Tabellen und eigene Daten</a></li>
+    <li><span class="num">7</span><a href="#uebungen">Übungen</a></li>
+    <li><span class="num">8</span><a href="#grenzen">Was geht, was nicht, wer was sieht</a></li>
+    <li><span class="num">9</span><a href="#faq">Wenn etwas klemmt</a></li>
+  </ol>
+</nav>
+
+<!-- ==================================================================== -->
+<section id="was">
+<h2><span class="num">1</span>Was das hier ist</h2>
+<p class="sub">Kein Simulator. Eine echte Datenbank, und ein Stück davon gehört dir.</p>
+
+<p>Datebänkli ist eine <strong>PostgreSQL-Datenbank</strong> — dieselbe Software, die hinter einer Menge Webseiten, Fahrplänen und Onlineshops steckt. Du bekommst darin ein eigenes Konto und einen eigenen Bereich. Was du dort tust, tust du wirklich: Du schreibst SQL, der Server führt es aus, und wenn etwas nicht geht, bekommst du dieselbe Fehlermeldung wie jede Softwareentwicklerin auch.</p>
+
+<p>Das Wichtigste zuerst, weil es die Art ändert, wie man damit arbeitet:</p>
+
+<div class="note ok">
+  <span class="label">Du darfst alles kaputt machen</span>
+  <p>Dein Bereich gehört dir allein. Du kannst darin jede Tabelle löschen, jede Zahl verändern und jederzeit mit einem Klick von vorne anfangen. Niemand sonst ist davon betroffen, und du bekommst keinen Ärger dafür. <strong>Ausprobieren ist hier der Weg, nicht der Umweg</strong> — wer nur abtippt, was an der Wandtafel steht, lernt SQL ungefähr so gut wie Velofahren aus einem Buch.</p>
+</div>
+
+<p>Was Datebänkli <em>nicht</em> tut: Es korrigiert nichts. Es gibt keine Punkte, kein grünes Häkchen und keine Musterlösung. Ob deine Abfrage die richtige Antwort liefert, entscheidest du — indem du dir das Ergebnis anschaust — und danach deine Lehrperson.</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="anmelden">
+<h2><span class="num">2</span>Anmelden</h2>
+<p class="sub">Zettel raus. Drei Zeilen, und du bist drin.</p>
+
+<p>Auf deinem Zettel stehen die Adresse, ein <strong>Benutzername</strong> und ein <strong>Passwort</strong>. Der Benutzername ist keine E-Mail-Adresse, sondern etwas wie <code>u_i3a_buehler_nino</code>: <code>u</code> für Lernende, dann das Kürzel deiner Klasse, dann dein Name. Alles klein, mit Unterstrichen. Das Passwort sind drei Wörter und eine Zahl mit Bindestrichen dazwischen — es ist so gebaut, dass man es vorlesen kann.</p>
+
+<div class="note warn">
+  <span class="label">Der Zettel ist der Schlüssel</span>
+  <p>Das Passwort steht <strong>nirgendwo</strong> gespeichert, auch nicht bei deiner Lehrperson. Weg ist weg. Verlierst du den Zettel, ist das kein Drama — deine Lehrperson stellt dir in zehn Sekunden einen neuen aus —, aber deine bisherige Arbeit bleibt dabei erhalten, und du solltest es nicht jede Woche brauchen. Fotografier ihn, wenn du weisst, dass du ihn verlierst.</p>
+</div>
+
+<p>Ein eigenes Passwort setzen <em>kannst</em> du, musst du aber nicht: <span class="ui">Passwort ändern</span> steht auf der Übersicht unter deinem Namen. Der Zettel gilt dann nicht mehr — merk es dir also wirklich, bevor du klickst.</p>
+
+<p>Angemeldet bleibst du <strong>12 Stunden</strong>, und die Uhr beginnt bei jedem Klick von vorn. Ein Schultag ist damit abgedeckt, eine Nacht nicht: Am nächsten Morgen meldest du dich neu an. Wenn du an einem Schulcomputer arbeitest, klick am Ende der Lektion oben rechts auf <span class="ui">Abmelden</span> — sonst sitzt die nächste Klasse in deiner Datenbank.</p>
+
+<p>Vertippst du dich zehnmal beim Passwort, macht die App eine Viertelstunde Pause mit dir. Bei fünf Versuchen passiert nichts; das ist normal und dafür eingerechnet.</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="seite">
+<h2><span class="num">3</span>Die Seite in einer Minute</h2>
+<p class="sub">Es gibt genau eine Seite, auf der gearbeitet wird: <span class="ui">SQL-Editor</span>.</p>
+
+<p>Sie ist in drei Teile geteilt. <strong>Links</strong> die Liste deiner Tabellen. <strong>Oben rechts</strong> das Feld, in das du SQL schreibst. <strong>Unten rechts</strong> das Ergebnis. Mehr gibt es nicht, und das ist Absicht.</p>
+
+<h3>Links: der Tabellenbaum</h3>
+<p>Zuoberst steht dein eigener Bereich — er heisst gleich wie dein Benutzername. Darunter <code>demo</code>: acht Beispieltabellen mit Schweizer Daten (Kantone, Gemeinden, Noten, Bestellungen …), die allen gehören. Lesen darf sie jede, ändern niemand.</p>
+
+<p><strong>Ein Klick auf einen Tabellennamen schreibt dir eine Abfrage und führt sie gleich aus</strong> (<code>SELECT * FROM … LIMIT 50</code>). Das ist der schnellste Weg zur Frage «was steht da überhaupt drin», und du brauchst dafür nichts zu tippen.</p>
+
+<p>Unter dem Baum steht, wie viel Speicherplatz du brauchst — du hast 50 MB. In einer normalen Lektion kommst du dort nicht an, siehe <a href="#grenzen">Abschnitt 8</a>.</p>
+
+<h3>Oben: die Leiste</h3>
+<p>Auf jeder Seite dieselbe, immer an derselben Stelle: <span class="ui">Übersicht</span>, <span class="ui">SQL-Editor</span> und <span class="ui">Übungen</span> links, rechts die Sprache (Deutsch oder Englisch), der Schalter für helles oder dunkles Design, das <span class="ui">?</span> für dieses Handbuch und ganz rechts <span class="ui">Abmelden</span>. Sprache und Design gelten für dein Konto, nicht für den Computer — sie kommen also mit, wenn du dich morgen woanders anmeldest.</p>
+
+<p>SQL-Schlüsselwörter bleiben in beiden Sprachen englisch. <code>SELECT</code> heisst überall <code>SELECT</code>; das ist keine Übersetzungslücke, sondern die Sprache selbst.</p>
+
+<h3>Ausführen</h3>
+<p><span class="ui">Ausführen</span>, oder schneller: <kbd>Strg</kbd> + <kbd>↵</kbd>, auf dem Mac <kbd>⌘</kbd> + <kbd>↵</kbd>. Daneben steht <span class="ui">Abbrechen</span> — für den Moment, in dem eine Abfrage länger läuft, als dir lieb ist. Rechts siehst du, wie viele Anweisungen gelaufen sind und wie lange es gedauert hat.</p>
+
+<p>Das Eingabefeld färbt SQL ein und schlägt dir Tabellen- und Spaltennamen vor, während du tippst. Vorgeschlagen wird nur, was du auch wirklich lesen darfst.</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="erste">
+<h2><span class="num">4</span>Deine erste Abfrage</h2>
+<p class="sub">Damit auf dem Bildschirm etwas passiert, bevor die Theorie kommt.</p>
+
+<p>Dein eigener Bereich ist am Anfang leer — ein leerer Bildschirm ist ein schlechter Start. Fang deshalb bei <code>demo</code> an. Klick links auf <code>kantone</code>, und du hast dein erstes Ergebnis, ohne eine Taste gedrückt zu haben.</p>
+
+<p>Danach schreib selbst etwas:</p>
+
+<div class="quote">SELECT name, einwohner
+FROM demo.kantone
+ORDER BY einwohner DESC
+LIMIT 5;</div>
+
+<p>Zwei Dinge, die dir hier begegnen und später ständig vorkommen:</p>
+<ul>
+  <li><strong>Der Punkt.</strong> <code>demo.kantone</code> heisst «die Tabelle <code>kantone</code> im Bereich <code>demo</code>». Bei deinen eigenen Tabellen kannst du den Teil vor dem Punkt weglassen — <code>SELECT * FROM meine_tabelle;</code> genügt, weil dein eigener Bereich zuerst durchsucht wird.</li>
+  <li><strong>Das Semikolon.</strong> Es beendet eine Anweisung. Du darfst mehrere hintereinander schreiben und alle auf einmal ausführen; dann bekommst du auch mehrere Ergebnisse untereinander.</li>
+</ul>
+
+<div class="note">
+  <span class="label">Mehrere Anweisungen sind ein Paket</span>
+  <p>Führst du fünf Anweisungen zusammen aus und die vierte schlägt fehl, werden auch die drei davor wieder rückgängig gemacht. Entweder alle oder keine. Das ist kein Ärgernis, sondern der Grund, weshalb es Transaktionen gibt — und du siehst es hier zum ersten Mal von selbst.</p>
+</div>
+
+<p>Angezeigt werden höchstens 1000 Zeilen. Sind es mehr, steht es über der Tabelle; gelaufen ist die Abfrage trotzdem vollständig.</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="fehler">
+<h2><span class="num">5</span>Wenn ein Fehler kommt</h2>
+<p class="sub">Und er kommt. Ungefähr alle zwei Minuten, bei allen.</p>
+
+<p>Eine rote Meldung heisst nicht, dass du etwas falsch machst — sie heisst, dass der Server dich nicht verstanden hat und dir jetzt genau sagt, woran es lag. Fehlermeldungen zu lesen ist ein Teil dessen, was man hier lernt, und ehrlich gesagt der nützlichste.</p>
+
+<p>Du bekommst drei Dinge übereinander:</p>
+<ol class="legend">
+  <li><strong>Eine Erklärung auf Deutsch</strong>, oft mit einem konkreten Vorschlag. Wenn die App meint, du habest <code>kioskumsat</code> statt <code>kioskumsatz</code> geschrieben, dann rät sie das nicht: Sie vergleicht mit den Tabellen, die du tatsächlich hast. Und wenn sie nichts Sinnvolles weiss, sagt sie lieber nichts, als etwas Falsches vorzuschlagen.</li>
+  <li><strong>Die Originalmeldung von PostgreSQL</strong>, auf Englisch. Genau dieser Text ist das, was man in eine Suchmaschine tippt — und was du in jedem anderen Datenbankwerkzeug ebenfalls sehen wirst.</li>
+  <li><strong>Stelle und Fehlercode.</strong> «Zeile 1, Zeichen 29» kommt vom Server und stimmt immer. Der Code daneben (etwa <code>42P01</code>) ist offiziell und international; danach kann man suchen.</li>
+</ol>
+
+<p>Die häufigsten vier, damit du sie wiedererkennst:</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Was du siehst</th><th>Was los ist</th></tr></thead>
+  <tbody>
+    <tr><td>relation … does not exist</td><td>Die Tabelle gibt es nicht. Tippfehler, oder sie liegt in einem anderen Bereich und der Teil vor dem Punkt fehlt.</td></tr>
+    <tr><td>column … does not exist</td><td>Die Spalte gibt es nicht. Schau links im Baum nach, wie sie wirklich heisst.</td></tr>
+    <tr><td>syntax error at or near …</td><td>Ein Wort steht an einer Stelle, an der SQL keines erwartet. Meist ein fehlendes Komma, ein fehlendes Semikolon — oder <code>WEHRE</code> statt <code>WHERE</code>.</td></tr>
+    <tr><td>must appear in the GROUP BY clause</td><td>Du mischst eine gruppierte Spalte mit einer ungruppierten. Jede Spalte, die nicht in einer Funktion wie <code>sum()</code> steckt, muss ins <code>GROUP BY</code>.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Hängt eine Abfrage, drück <span class="ui">Abbrechen</span>. Tust du es nicht, stoppt der Server sie nach etwa zwanzig Sekunden selbst. Kaputt geht dabei nichts. Meist steckt ein Verbund ohne Bedingung dahinter — zwei Tabellen im <code>FROM</code>, aber kein <code>JOIN … ON</code>, und schon kombiniert die Datenbank jede Zeile mit jeder.</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="eigene">
+<h2><span class="num">6</span>Eigene Tabellen und eigene Daten</h2>
+<p class="sub">Dein Bereich ist leer, bis du etwas hineinstellst.</p>
+
+<h3>Von Hand</h3>
+<p>Ganz normales SQL, ohne Bereichsangabe — es landet automatisch bei dir:</p>
+
+<div class="quote">CREATE TABLE lieblingsfilme (
+  titel  text NOT NULL,
+  jahr   int,
+  note   numeric(2,1)
+);
+
+INSERT INTO lieblingsfilme VALUES ('Arrival', 2016, 5.5);</div>
+
+<h3>Aus einer Datei</h3>
+<p>Oben auf der Seite: <span class="ui">CSV importieren</span>. Du wählst eine Datei, die App liest sie, rät für jede Spalte einen Datentyp und zeigt dir eine Vorschau — <em>bevor</em> etwas entsteht. Erst <span class="ui">Importieren</span> legt die Tabelle an, danach steht sie links im Baum.</p>
+
+<p>Zwei Stellen, an denen es fast immer klemmt:</p>
+<ul>
+  <li><strong>Das Trennzeichen.</strong> Schweizer Excel schreibt Strichpunkte statt Kommas. Die App merkt das meistens selbst; sieht die Vorschau nach Kraut und Rüben aus, stell es um.</li>
+  <li><strong>Die Datentypen.</strong> Was die App vorschlägt, ist ein Vorschlag. Eine Artikelnummer wie <code>0042</code> gehört als <code>text</code> in die Datenbank und nicht als Zahl, sonst wird daraus <code>42</code> und die führende Null ist weg. Die Faustregel: Zahl nur, wenn du damit auch rechnen willst. Solche Entscheidungen sind der eigentliche Inhalt dieses Dialogs.</li>
+</ul>
+
+<p>Erlaubt sind 10 MB und 100 000 Zeilen pro Datei. Datumsangaben wie <code>31.12.2025</code> und Zahlen wie <code>1'234.50</code> versteht die App; <code>03/04/2025</code> lässt sie absichtlich als Text stehen, weil daraus nicht hervorgeht, ob der 3. April oder der 4. März gemeint ist.</p>
+
+<h3>Wieder aufräumen</h3>
+<p><code>DROP TABLE lieblingsfilme;</code> wirft eine Tabelle weg. Willst du ganz von vorne anfangen, gibt es oben <span class="ui">Datenbank zurücksetzen</span>: Das löscht <strong>alle</strong> deine Tabellen auf einmal und fragt vorher nach. Betroffen ist immer nur dein eigener Bereich.</p>
+
+<div class="note warn">
+  <span class="label">Es gibt keine Sicherung</span>
+  <p>Dein Bereich ist ein Arbeitsplatz, kein Archiv. Gelöschtes lässt sich nicht wiederherstellen — auch nicht von deiner Lehrperson. Wenn du etwas behalten willst, kopier die <code>CREATE TABLE</code>- und <code>INSERT</code>-Befehle in ein Dokument. Das ist übrigens die ehrlichste Version der Lektion «wozu Backups gut sind».</p>
+</div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="uebungen">
+<h2><span class="num">7</span>Übungen</h2>
+<p class="sub">Reiter <span class="ui">Übungen</span>. Leer, solange deine Lehrperson keine verteilt hat.</p>
+
+<p>Eine Übung ist ein Satz Tabellen mit einer Aufgabenstellung daneben — und <strong>du bekommst eine eigene Kopie davon</strong>. Was du darin änderst, änderst du nur bei dir. Deine Klassenkameradin sieht davon nichts.</p>
+
+<p><span class="ui">Bearbeiten</span> bringt dich in den SQL-Editor. Über dem Eingabefeld erscheint ein Balken mit dem Titel der Übung und drei Schaltflächen:</p>
+
+<ul>
+  <li><span class="ui">Aufgabe</span> klappt die Aufgabenstellung auf und wieder zu.</li>
+  <li><span class="ui">Tabellen zurücksetzen</span> stellt <em>nur</em> die Übung wieder her, so wie sie am Anfang war. Deine eigene Datenbank bleibt unberührt. Genau deshalb darfst du in einer Übung ohne Nachdenken alles kaputt machen.</li>
+  <li><span class="ui">Abgeben</span> schickt deiner Lehrperson, was gerade im Editor steht, wahlweise mit einer Notiz dazu.</li>
+</ul>
+
+<p>Über <span class="ui">Eigene Datenbank</span> kommst du wieder in deinen normalen Bereich zurück.</p>
+
+<div class="note ok">
+  <span class="label">Mehrmals abgeben ist vorgesehen</span>
+  <p>Du kannst so oft abgeben, wie du willst — es wird nichts überschrieben, und es zählt nicht gegen dich. Deine Lehrperson sieht alle Versuche. Gib also lieber früh etwas Halbfertiges ab, als am Schluss gar nichts. Unter <span class="ui">Meine Abgaben</span> im Reiter <span class="ui">Übungen</span> siehst du selbst, was von dir angekommen ist, und kannst es herunterladen.</p>
+</div>
+
+<p>Ein Detail, das sonst verwirrt: Solange du in einer Übung arbeitest, meint <code>SELECT * FROM kunden;</code> <strong>die Tabelle der Übung</strong> — nicht eine gleichnamige aus deiner eigenen Datenbank. Im Baum links steht die Übung als eigener Eintrag mit ihrem Titel.</p>
+
+<p>Lässt sich eine Übung nicht öffnen oder fehlt eine Tabelle darin, ist das nicht dein Fehler. Sag es deiner Lehrperson — sie kann es beheben, du nicht.</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="grenzen">
+<h2><span class="num">8</span>Was geht, was nicht, wer was sieht</h2>
+<p class="sub">Kurz, damit du nicht raten musst.</p>
+
+<h3>Die Grenzen</h3>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Grenze</th><th>Wert</th><th>Was das heisst</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Dein Speicher</td><td>50 MB</td>
+      <td>Voll? Dann kannst du weiterhin lesen, aber nichts mehr schreiben. Platz schafft <code>DROP TABLE</code> oder <code>TRUNCATE</code> — <code>DELETE</code> <strong>nicht</strong>: Die Zeilen sind weg, der Platz bleibt belegt.</td>
+    </tr>
+    <tr>
+      <td>Dauer einer Abfrage</td><td>ca. 20 Sekunden</td>
+      <td>Danach wird sie gestoppt. Reicht für alles Sinnvolle und beendet den versehentlichen Riesen-Verbund von selbst.</td>
+    </tr>
+    <tr>
+      <td>Angezeigte Zeilen</td><td>1000</td>
+      <td>Darüber steht, wie viele es insgesamt wären.</td>
+    </tr>
+    <tr>
+      <td>CSV-Import</td><td>10 MB / 100 000 Zeilen</td>
+      <td>Grösseres wird abgelehnt, bevor etwas entsteht.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Wer was sehen kann</h3>
+<ul>
+  <li><strong>Andere Lernende sehen deine Daten nicht</strong>, und du siehst ihre nicht. Wer es versucht, bekommt eine Zugriffsverweigerung — nicht von der App, sondern von PostgreSQL selbst. Das ist der Unterschied zwischen «ist abgeschaltet» und «geht nicht».</li>
+  <li><strong>Namen sind sichtbar, Inhalte nicht.</strong> Man kann herausfinden, <em>dass</em> es andere Bereiche und Tabellen gibt. Eine einzige Zeile daraus lesen kann man nicht. Metadaten und Daten sind zwei verschiedene Dinge — merk dir das Wortpaar, es kommt wieder.</li>
+  <li><strong><code>demo</code> darfst du lesen, aber nicht ändern.</strong> Der Versuch, dort die eigene Note zu korrigieren, scheitert zuverlässig. Probier es ruhig aus; die Fehlermeldung ist lehrreicher als dieser Satz.</li>
+</ul>
+
+<div class="note">
+  <span class="label">Deine Lehrperson sieht mit — und das steht hier, damit du es weisst</span>
+  <p>Sie kann sehen, welche Befehle du abgeschickt hast, welche davon Fehler ergeben haben, welche Tabellen du angelegt hast, und sie darf deine Tabellen lesen. Ändern kann sie darin nichts.</p>
+  <p>Was sie <em>nicht</em> sieht: deinen Bildschirm, deine Tastenanschläge, irgendetwas ausserhalb von Datebänkli. Nur das, was du tatsächlich an die Datenbank geschickt hast. Und der praktische Teil davon: Wenn etwas nicht funktioniert, muss sie dir nicht glauben — sie kann nachschauen, und das geht schneller als jede Erklärung.</p>
+</div>
+
+<h3>Der Demo-Zugang</h3>
+<p>Falls du über den Knopf <span class="ui">Als Schüler:in</span> auf der Anmeldeseite hereingekommen bist statt über einen Zettel: Das ist ein Zugang zum Ausprobieren. Nach <strong>30 Minuten</strong> ist Schluss, und danach wird alles gelöscht, was du in dieser halben Stunde gemacht hast. Nimm nichts hinein, was du behalten willst.</p>
+</section>
+
+<!-- ==================================================================== -->
+<section id="faq">
+<h2><span class="num">9</span>Wenn etwas klemmt</h2>
+
+<details class="faq">
+  <summary>Ich kann mich nicht anmelden.</summary>
+  <p>Der Reihe nach: Benutzername ganz klein und mit Unterstrichen? Passwort mit Bindestrichen und ohne Leerzeichen — und ohne das Leerzeichen, das die Autokorrektur am Schluss anhängt? Steckt vielleicht noch der Zettel deiner Sitznachbarin in deiner Hand? Wenn alles stimmt und es trotzdem nicht geht, sag es deiner Lehrperson; sie stellt dir einen neuen Zettel aus.</p>
+</details>
+
+<details class="faq">
+  <summary>Ich habe meinen Zettel verloren.</summary>
+  <p>Deine Lehrperson stellt dir einen neuen aus, das dauert zehn Sekunden. Deine Tabellen bleiben dabei, wo sie sind — nur das Passwort ist ein anderes.</p>
+</details>
+
+<details class="faq">
+  <summary>Meine Abfrage läuft und läuft.</summary>
+  <p><span class="ui">Abbrechen</span> daneben stoppt sie, sonst der Server nach etwa zwanzig Sekunden. Es geht dabei nichts kaputt und nichts verloren. Schau danach, ob im <code>FROM</code> zwei Tabellen stehen, aber kein <code>JOIN … ON</code> dazwischen.</p>
+</details>
+
+<details class="faq">
+  <summary>Ich kann plötzlich nichts mehr speichern.</summary>
+  <p>Dann sind deine 50 MB voll — unter dem Tabellenbaum links steht es. Lesen geht weiter, schreiben nicht. Wirf mit <code>DROP TABLE</code> weg, was du nicht mehr brauchst, oder setz mit <span class="ui">Datenbank zurücksetzen</span> alles auf null. <code>DELETE</code> hilft hier nicht.</p>
+</details>
+
+<details class="faq">
+  <summary>Ich habe aus Versehen alles gelöscht.</summary>
+  <p>Passiert, ist erlaubt, und niemand sonst ist betroffen. Wiederherstellen lässt es sich nicht. Fang neu an — beim zweiten Mal bist du dreimal so schnell, und das ist keine Floskel.</p>
+</details>
+
+<details class="faq">
+  <summary>Die Tabelle gibt es angeblich nicht, ich sehe sie aber links.</summary>
+  <p>Dann steht sie in einem anderen Bereich als dem, in dem du gerade suchst. Schreib den Namen mit Punkt davor: <code>demo.kantone</code> statt <code>kantone</code>. Und achte darauf, ob du gerade in einer Übung bist — dort meinen Namen ohne Punkt die Tabellen der Übung.</p>
+</details>
+
+<details class="faq">
+  <summary>Kann ich die Datenbank von jemand anderem anschauen?</summary>
+  <p>Nein. Nicht «du solltest nicht», sondern: PostgreSQL lässt es nicht zu. Du siehst höchstens, dass es andere Bereiche gibt — Inhalte nie.</p>
+</details>
+
+<details class="faq">
+  <summary>Kann ich zu Hause weiterarbeiten?</summary>
+  <p>Ja. Es ist dieselbe Adresse und derselbe Zettel, und deine Tabellen liegen auf dem Server, nicht auf dem Schulcomputer. Ein Browser genügt; installieren musst du nichts.</p>
+</details>
+
+<details class="faq">
+  <summary>Die Oberfläche soll auf Englisch sein.</summary>
+  <p>Oben rechts das Auswahlfeld. Die Einstellung gehört zu deinem Konto und kommt aufs nächste Gerät mit. SQL selbst bleibt so oder so englisch.</p>
+</details>
+</section>
+
+<footer>
+  <p><strong>Datebänkli</strong> — bei Fragen zuerst deine Lehrperson fragen. Sie sieht mehr als du denkst und kann das meiste in einer halben Minute richten.</p>
+  <p>Alle Namen und Tabellen in diesem Handbuch sind erfunden.</p>
+</footer>
+
+</div>
+</body>
+</html>

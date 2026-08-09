@@ -210,11 +210,34 @@ const NAV_HIDDEN = {
   teacher: [],
 };
 
+/**
+ * Which handbook the `?` opens (0.10.3).
+ *
+ * There are two documents — `/handbuch` for staff, `/handbuch-lernende` for
+ * students — and the markup carries the staff one, because that is the one an
+ * account with no role at all should get. Only the student is redirected, and
+ * only here: the `href` cannot be branched in the pages themselves without
+ * breaking the byte-identical bar, which is the whole point of that test.
+ *
+ * The `?` was the teacher's manual for every reader until now, which was the
+ * placeholder the markup's own comment described. A student who opened it
+ * landed in "Klasse anlegen" — not harmful, but it read as "this is not for
+ * you", on the one page they spend a whole lesson in.
+ *
+ * `title`/`aria-label` stay as they are: "Handbuch öffnen" is true either way,
+ * and rewriting them here would be the second owner of a label the markup
+ * already sets — the trap `app.css`'s banner records for `data-i18n-attr`.
+ */
+const HANDBOOK = { student: '/handbuch-lernende' };
+
 export function mountNav(role, path = location.pathname) {
   for (const id of NAV_HIDDEN[role] ?? []) {
     const link = document.getElementById(id);
     if (link) link.hidden = true;
   }
+
+  const help = document.getElementById('help');
+  if (help && HANDBOOK[role]) help.href = HANDBOOK[role];
 
   for (const link of document.querySelectorAll('.navlink')) {
     // `getAttribute`, not `.href`: the property is absolute, and comparing

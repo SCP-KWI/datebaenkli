@@ -6,6 +6,24 @@
 <title>Datebänkli — Handbuch für Lehrpersonen</title>
 <meta name="description" content="Kurzanleitung für Datebänkli: eine echte PostgreSQL-Datenbank pro Lernende, im Browser, ohne Installation auf einem einzigen Gerät.">
 <style>
+/* ============================================================
+   Das Aussehen BEIDER Handbücher — `build.mjs` setzt diese Datei für den
+   STYLE-Platzhalter in jede `*.src.html` ein. (Ausgeschrieben steht er hier
+   nicht: er würde mitkopiert, und der Platzhalter-Check am Ende des Builds
+   meldete ihn dann als übrig geblieben. Was er ja auch wäre.)
+
+   Es lag bis 0.10.3 im `<style>` des Lehrpersonen-Handbuchs. Als das zweite
+   Dokument dazukam, war die Wahl: 270 Zeilen kopieren, oder eine Datei. Der
+   Fall ist derselbe wie bei `chalk-tokens.css` in der App, für den es einen
+   eigenen Test gibt — zwei Kopien einer Stilvorlage driften, und man sieht es
+   erst, wenn die beiden Dokumente nebeneinander liegen, was nie passiert.
+
+   Regeln, die nur das eine Dokument braucht (`.fig`, `.legend`, `.flow`),
+   stehen trotzdem hier. Ein paar ungenutzte Selektoren im Lernenden-Handbuch
+   sind billiger als die Frage, in welche der beiden Dateien eine neue Regel
+   gehört.
+   ============================================================ */
+
 @font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
@@ -315,6 +333,7 @@ footer {
   figure { break-inside: avoid; }
   .fig { box-shadow: none; }
 }
+
 </style>
 </head>
 <body>
@@ -331,7 +350,7 @@ footer {
   </div>
   <h1>Handbuch für Lehrpersonen</h1>
   <p class="lede">Eine echte PostgreSQL-Datenbank pro Lernende — im Browser, ohne Installation auf einem einzigen Gerät. Du verteilst Zettel, die Klasse tippt SQL.</p>
-  <p class="meta">Stand: August 2026 · Version 0.10.3 · Fragen und Zugänge: philip.schaffner@kwi.ch</p>
+  <p class="meta">Stand: August 2026 · Version 0.10.4 · Fragen und Zugänge: philip.schaffner@kwi.ch</p>
 </header>
 
 <nav class="toc" aria-label="Inhalt">
@@ -656,6 +675,12 @@ footer {
 <p class="sub">Damit du es in zwei Sätzen erklären kannst, statt es vorzuführen.</p>
 
 <p>Lernende haben im Wesentlichen eine einzige Seite. Links die Tabellen, oben rechts das Eingabefeld, unten rechts das Ergebnis. Es gibt nichts zu suchen und nichts einzustellen. Dazu kommt der Reiter <span class="ui">Übungen</span> — leer, solange du keine verteilt hast (<a href="#uebungen">Abschnitt 10</a>). Deine eigene Ansicht ist dieselbe Seite — du hast ebenfalls einen Arbeitsbereich, und dort kannst du eine Lektion vorbereiten.</p>
+
+<div class="note ok">
+  <span class="label">Für die Klasse gibt es ein eigenes Handbuch</span>
+  <p>Das <a href="/handbuch-lernende">Handbuch für Lernende</a> ist die kurze Fassung dieses Abschnitts aus ihrer Sicht: anmelden, die Seite verstehen, Fehlermeldungen lesen, Übungen abgeben. Es steckt hinter demselben <span class="ui">?</span> oben rechts — bei einem Lernendenkonto führt der Knopf automatisch dorthin und nicht hierher. Du musst also nichts verteilen; es reicht, einmal zu sagen, dass es das gibt.</p>
+  <p>Es beschreibt auch die Lektionsansicht aus <a href="#lektion">Abschnitt 11</a> — was du siehst und was nicht. Das nimmt dir die Ankündigung nicht ab, macht sie aber kürzer.</p>
+</div>
 
 <svg class="fig fig--desktop" viewBox="-56 0 1404 700" role="img">
 <defs><marker id="ah-editor" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
