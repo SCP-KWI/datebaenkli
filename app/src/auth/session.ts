@@ -10,6 +10,10 @@
  * Sessions are rolling: a session in active use is extended, an idle one dies
  * on its own. Expired rows are swept periodically rather than at read time, so
  * a full table never accumulates from students who just close the laptop lid.
+ *
+ * Phase 10 adds a third kind of expiry, `hard_expires_at`: an absolute stop for
+ * one session that activity cannot move. It is null for every real account, and
+ * it is what makes a demo lease 30 minutes rather than 30 minutes of idleness.
  */
 
 import { createHash, randomBytes } from 'node:crypto';
@@ -31,6 +35,8 @@ export interface SessionUser {
 export interface LoadedSession {
   user: SessionUser;
   expiresAt: Date;
+  /** The lease's absolute stop, or null for an ordinary session. Phase 10. */
+  hardExpiresAt: Date | null;
 }
 
 /** Opaque value handed to the browser. Never stored. */
@@ -51,17 +57,32 @@ export async function createSession(
   db: Queryable,
   userId: number,
   origin: SessionOrigin = {},
+  /**
+   * An absolute stop for this one session, on top of the global ceiling.
+   *
+   * Phase 10's demo lease is the only caller that passes one: a visitor gets 30
+   * minutes and no amount of clicking extends it. A property of the *session*
+   * rather than of the account on purpose — see `meta/004_demo.sql`.
+   */
+  hardExpiresAt: Date | null = null,
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = newSessionToken();
-  const expiresAt = new Date(Date.now() + config.session.ttlMs);
+  const rolling = new Date(Date.now() + config.session.ttlMs);
+  // The row's own expiry never exceeds its ceiling, so nothing downstream has to
+  // remember to check both. `refreshSession` and `loadSession` check anyway;
+  // this is what makes the *first* twelve hours of a 30-minute lease impossible
+  // rather than merely refused later.
+  const expiresAt =
+    hardExpiresAt !== null && hardExpiresAt.getTime() < rolling.getTime() ? hardExpiresAt : rolling;
 
   await db.query(
-    `INSERT INTO session (id, user_id, expires_at, ip, user_agent)
-     VALUES ($1, $2, $3, $4, $5)`,
+    `INSERT INTO session (id, user_id, expires_at, hard_expires_at, ip, user_agent)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
     [
       tokenKey(token),
       userId,
       expiresAt,
+      hardExpiresAt,
       // `inet` rejects junk; an unparseable forwarded address should not fail a
       // login, so hand Postgres NULL rather than something it will reject.
       origin.ip !== undefined && isIP(origin.ip) !== 0 ? origin.ip : null,
@@ -74,6 +95,7 @@ export async function createSession(
 
 interface SessionRow {
   expires_at: Date;
+  hard_expires_at: Date | null;
   id: number;
   username: string;
   display_name: string;
@@ -93,13 +115,19 @@ interface SessionRow {
  * every request; it is updated on login and by the query runner in phase 3.
  */
 export async function loadSession(db: Queryable, token: string): Promise<LoadedSession | null> {
+  // The `hard_expires_at` test is redundant while `createSession` and
+  // `refreshSession` both clamp `expires_at` to it, and it is kept anyway: this
+  // is the one place a demo lease's 30 minutes is checked against the row
+  // actually being used, so a future writer that sets `expires_at` directly
+  // cannot silently hand a visitor an unbounded session.
   const { rows } = await db.query<SessionRow>(
-    `SELECT s.expires_at,
+    `SELECT s.expires_at, s.hard_expires_at,
             u.id, u.username, u.display_name, u.role, u.state, u.locale,
             u.must_change_password, u.pg_role
        FROM session s
        JOIN app_user u ON u.id = s.user_id
-      WHERE s.id = $1 AND s.expires_at > now() AND u.state = 'active'`,
+      WHERE s.id = $1 AND s.expires_at > now() AND u.state = 'active'
+        AND (s.hard_expires_at IS NULL OR s.hard_expires_at > now())`,
     [tokenKey(token)],
   );
 
@@ -108,6 +136,7 @@ export async function loadSession(db: Queryable, token: string): Promise<LoadedS
 
   return {
     expiresAt: row.expires_at,
+    hardExpiresAt: row.hard_expires_at,
     user: {
       id: row.id,
       username: row.username,
@@ -139,27 +168,56 @@ export async function loadSession(db: Queryable, token: string): Promise<LoadedS
  * A week, against a 12-hour TTL. It cannot interrupt a lesson — reaching it
  * takes seven days of using the same session without ever logging out — and it
  * lands the re-authentication on a login page rather than mid-query.
+ *
+ * A demo lease's own ceiling (phase 10) is deliberately *not* expressed here as
+ * a shorter `absoluteTtlMs`: that value is global, and a demo visitor and a
+ * class share this code path.
  */
 export async function refreshSession(
   db: Queryable,
   token: string,
-  expiresAt: Date,
+  session: Pick<LoadedSession, 'expiresAt' | 'hardExpiresAt'>,
 ): Promise<Date | null> {
+  // A session with an absolute stop has nothing to extend: `createSession`
+  // already set `expires_at` to the stop itself, and the `LEAST` below would
+  // write the same value back.
+  //
+  // This is not merely an optimisation, which is why it is a guard rather than
+  // a comment on the clamp. The halfway test underneath is measured against the
+  // *global* 12-hour TTL, so a 30-minute demo session is always inside it — and
+  // without this line every single request a demo visitor makes would issue an
+  // UPDATE, which is the exact per-request write the halfway test exists to
+  // prevent.
+  if (session.hardExpiresAt !== null) return null;
+
   const halfLife = config.session.ttlMs / 2;
-  if (expiresAt.getTime() - Date.now() > halfLife) return null;
+  if (session.expiresAt.getTime() - Date.now() > halfLife) return null;
 
   const next = new Date(Date.now() + config.session.ttlMs);
   // `LEAST` in SQL rather than a read-then-write: the row is right here, and
   // two round trips would leave a window where a session past the ceiling is
   // extended anyway. A session already past it simply stops being extended and
   // expires on its own — no separate deletion, and the sweeper collects it.
-  await db.query(
+  //
+  // Phase 10 adds a third term. `LEAST` ignores NULLs, so an ordinary session —
+  // where `hard_expires_at` is NULL — is clamped by exactly the two terms it
+  // always was, and a demo lease is additionally pinned to its 30 minutes no
+  // matter how busy the visitor is. That NULL-skipping is the reason this is one
+  // expression rather than a branch in TypeScript.
+  //
+  // **`RETURNING` rather than trusting `next`.** The old version returned the
+  // value it had *asked* for, which is what the cookie was then set to — so a
+  // clamped session handed the browser an expiry later than the row's, and the
+  // 30-minute lease would have looked like twelve hours to the countdown in
+  // §9g. It never mattered while the only clamp was seven days away.
+  const { rows } = await db.query<{ expires_at: Date }>(
     `UPDATE session
-        SET expires_at = LEAST($2::timestamptz, created_at + $3::interval)
-      WHERE id = $1`,
+        SET expires_at = LEAST($2::timestamptz, created_at + $3::interval, hard_expires_at)
+      WHERE id = $1
+      RETURNING expires_at`,
     [tokenKey(token), next, config.session.absoluteTtlMs + ' milliseconds'],
   );
-  return next;
+  return rows[0]?.expires_at ?? null;
 }
 
 export async function destroySession(db: Queryable, token: string): Promise<void> {

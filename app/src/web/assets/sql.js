@@ -20,7 +20,7 @@ import { createEditor } from '/assets/editor.js';
 import { hintFor, renderHint } from '/assets/hints.js';
 import { apply, errorText, formats, load, paintCached, t, wireLanguageSelect } from '/assets/i18n.js';
 import { renderMarkdown } from '/assets/markdown.js';
-import { esc, json, mb, mountVersion, ticked, wireThemeToggle } from '/assets/util.js';
+import { esc, json, mb, mountDemoBanner, mountVersion, ticked, wireThemeToggle } from '/assets/util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -112,6 +112,9 @@ apply();
 // currently points, which no `data-i18n` key can express.
 paintTheme();
 wireLanguageSelect($('lang'));
+// The demo countdown, if this session is a demo lease. `me.demo` is null for
+// every real account, so the call is unconditional (HANDOFF §9g).
+mountDemoBanner(me.demo, t);
 mountVersion($('version'), (d) => formats().dateTime(d));
 
 // --- the editor --------------------------------------------------------------

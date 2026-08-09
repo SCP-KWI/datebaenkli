@@ -23,6 +23,12 @@ import { forbidden, unauthorized } from './errors.js';
 export interface AuthContext {
   user: SessionUser;
   token: string;
+  /**
+   * When this session stops regardless of activity, or null for an ordinary
+   * one. Phase 10's demo lease is what sets it; `/api/me` hands it to the page
+   * so a visitor sees a countdown rather than a sudden 401 (HANDOFF §9g).
+   */
+  hardExpiresAt: Date | null;
 }
 
 declare module 'fastify' {
@@ -91,9 +97,9 @@ export function registerAuthHooks(app: FastifyInstance, db: Db): void {
       return;
     }
 
-    req.auth = { user: session.user, token };
+    req.auth = { user: session.user, token, hardExpiresAt: session.hardExpiresAt };
 
-    const extended = await refreshSession(db, token, session.expiresAt).catch((err: unknown) => {
+    const extended = await refreshSession(db, token, session).catch((err: unknown) => {
       // Same reasoning: failing to *extend* a session is not a reason to fail
       // the request the user actually made.
       req.log.warn({ err }, 'session refresh failed');

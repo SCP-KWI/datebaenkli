@@ -14,7 +14,7 @@
 import type { Db, Queryable } from '../db/query.js';
 import { audit } from './audit.js';
 import { PROVISION_OK, tryProvision, type ProvisionOutcome, type Provisioner } from './provision.js';
-import { ServiceError } from './users.js';
+import { assertDemoMayNot, ServiceError } from './users.js';
 
 export type ClassState = 'active' | 'archived';
 
@@ -144,6 +144,10 @@ export async function createClass(db: Db, actorId: number, input: NewClass): Pro
   const name = input.name.trim();
   if (name === '') throw new ServiceError('invalid_name', 'A class needs a name.');
 
+  // Before the transaction, like every other check here: a demo teacher's class
+  // arrives pre-built (HANDOFF §9f).
+  await assertDemoMayNot(db, actorId, 'create classes');
+
   return db.tx(async (q) => {
     const { rows: teacherRows } = await q.query<{ role: string }>(
       `SELECT role FROM app_user WHERE id = $1 AND state = 'active'`,
@@ -200,6 +204,11 @@ export async function updateClass(
   if (name !== undefined && name === '') {
     throw new ServiceError('invalid_name', 'A class needs a name.');
   }
+
+  // A rename survives a demo reset — `resetSlot` restores schemas and exercises,
+  // not the class row — so the next visitor would inherit whatever the last one
+  // typed. Cheaper to refuse than to grow a fixture the reset has to replay.
+  await assertDemoMayNot(db, actorId, 'change classes');
 
   const { updated, handover } = await db.tx(async (q) => {
     const { rows: beforeRows } = await q.query<{ teacher_id: number }>(
@@ -308,6 +317,9 @@ export async function updateClass(
  * `k3a` in 2026, and students' accounts and schemas survive independently.
  */
 export async function archiveClass(db: Db, actorId: number, id: number): Promise<SchoolClass> {
+  // Archiving is the one class mutation with no undo a demo reset could
+  // perform: `resetSlot` wipes schemas and exercises, not class state.
+  await assertDemoMayNot(db, actorId, 'archive classes');
   return db.tx(async (q) => {
     const { rows } = await q.query<{ id: number }>(
       `UPDATE class SET state = 'archived' WHERE id = $1 AND state = 'active' RETURNING id`,

@@ -668,4 +668,23 @@ export default {
   'error.too_many_sources': 'Eine Übung kann höchstens 20 Tabellen oder Skripte haben.',
   'error.csv_types_rejected':
     'Einige Werte passen nicht zu den gewählten Datentypen. Korrigiere die Typen oder die Datei.',
+
+  // --- the public demo (phase 10) -------------------------------------------
+  //
+  // `demo.left` counts down in whole minutes. Seconds would be precise and
+  // would also turn a banner nobody needs to watch into one that moves, and
+  // the last minute says "gleich" rather than "0 Minuten" for the same reason.
+  'demo.left': 'Demo — noch {minutes} Minuten',
+  'demo.soon': 'Demo — die Sitzung endet gleich',
+  'demo.end': 'Beenden',
+  'demo.over': 'Die Demo-Sitzung ist abgelaufen.',
+  'error.demo_pool_busy':
+    'Gerade sind alle Demo-Zugänge belegt. Versuche es in ein paar Minuten nochmals.',
+  'error.demo_not_allowed':
+    'Das geht im Demo-Zugang nicht. Alles andere funktioniert normal.',
+  // Only an admin ever sees this one: the public route 404s when the demo is
+  // off, so this is what /api/admin/demo/ensure answers on an instance where
+  // DBK_DEMO_ENABLED was never set.
+  'error.demo_disabled': 'Die Demo ist auf dieser Installation nicht eingeschaltet.',
+  'error.too_many_requests': 'Zu viele Anfragen. Warte einen Moment.',
 };

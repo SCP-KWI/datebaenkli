@@ -97,7 +97,16 @@ export function registerSessionRoutes(app: FastifyInstance, db: Db): void {
     const session = currentUser(req);
     const user = await getUser(db, session.id);
     if (!user) throw unauthorized();
-    return { user, app: { publicUrl: config.publicUrl } };
+    // `demo` is about the *session*, not the account, which is why it is read
+    // off `req.auth` rather than out of `user`. A demo account that somehow
+    // held an ordinary session would get no countdown, and that is the honest
+    // answer — there would be nothing to count down to.
+    const demo = req.auth?.hardExpiresAt ?? null;
+    return {
+      user,
+      app: { publicUrl: config.publicUrl },
+      demo: demo === null ? null : { expiresAt: demo.toISOString() },
+    };
   });
 
   /**

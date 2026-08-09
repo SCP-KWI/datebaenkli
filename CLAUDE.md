@@ -54,6 +54,12 @@ licence — names are still folded to `[a-z_][a-z0-9_]*` and then re-checked
 against that pattern before being quoted. **A third such file needs the same
 argument made explicitly, or it does not belong.**
 
+Phase 10 is the second confirmation of the rule: `services/demo.ts` wipes
+schemas and drops exercise workspaces, which is identifier-taking DDL — and it
+builds no SQL at all, because `resetSchema`, `listWorkspaces` and `dropWorkspace`
+already existed in `provision.ts`. Its header says so, and says what to do if an
+edit there ever wants to quote an identifier: the seam belongs in `provision.ts`.
+
 Phase 9 is the shape to copy when that comes up. `services/exercise.ts` needed
 both hazards and became neither file: the schema, its drop and the teacher's
 grant went **into** `provision.ts` as new seams, and the CSV fixtures go through
@@ -66,6 +72,12 @@ concatenation, which is the line `import.ts` draws.
 **Routes are closed by default.** Authentication and the must-change-password
 gate are global hooks; a route is open only if it says `config: { public: true }`.
 A route added without thinking about it is closed, which is the right default.
+
+`POST /api/demo/start` (phase 10) is the one route that hands out a session to a
+caller who proved nothing, and it is deliberate — `docs/HANDOFF.md` §9d has the
+argument. What keeps it narrow is that it can only ever return one of a fixed
+set of pre-provisioned accounts and creates nothing. **Do not use it as the
+precedent for a second public route that mints a session.**
 
 The exceptions are the pages and `/assets`, which are `public` on purpose: they
 are program text, not data, and every action they offer goes through an `/api`
@@ -171,6 +183,8 @@ Three layers, and the split matters:
 | `test/import.live.test.mjs` | a **real** server | that a CSV lands in your own schema, holds the values you meant, and leaves nothing behind when it fails. Ditto. |
 | `test/lifecycle.live.test.mjs` | a **real** server | that cold storage dumps and drops, that reconcile does *not* undo it, and that a restored student can read her own rows. Ditto. |
 | `test/exercise.live.test.mjs` | a **real** server | that an exercise workspace is genuinely the student's — both directions — that resetting one leaves the playground and every other exercise alone, and that a teacher can read one but not write to it. Ditto. |
+| `test/demo.test.mjs` | migrated PGlite + a recording provisioner | the demo pool: which slot a claim takes, that a failed wipe hands it *back* rather than serving it dirty, what a reset clears besides the schema, the four teacher caps, and the per-session ceiling. It sets `DBK_DEMO_ENABLED` **before any import** — `config.ts` validates at import and is a singleton |
+| `test/demo.live.test.mjs` | a **real** server | that a wipe is a wipe: the next visitor cannot read the last one's tables, the exercise workspaces go too, and the account can still log in afterwards. Ditto. |
 
 **The live suites cannot provision concurrently** — `node --test` runs files in
 parallel, and `GRANT CONNECT ON DATABASE` updates one shared `pg_database` row,

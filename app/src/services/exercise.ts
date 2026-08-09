@@ -70,7 +70,17 @@ import { createAndFill, foldRelationName, MAX_IMPORT_COLUMNS } from './import.js
 import type { Provisioner } from './provision.js';
 import { type QueryError, toQueryError } from './query.js';
 import { estimateImportBytes, type QuotaGuard } from './quota.js';
-import { pgIdentity, ServiceError } from './users.js';
+import { isDemoAccount, pgIdentity, ServiceError } from './users.js';
+
+/**
+ * How many exercises a demo teacher may hold at once (HANDOFF §9f).
+ *
+ * Two, because the demo's point is that an exercise can be written, handed out
+ * and read back — which takes one — and that a teacher has more than one of
+ * them. A third adds nothing a visitor learns from and doubles what a reset has
+ * to drop.
+ */
+const DEMO_MAX_EXERCISES = 2;
 
 // --- limits ------------------------------------------------------------------
 //
@@ -368,6 +378,24 @@ export function makeExerciseService(deps: ExerciseServiceDeps) {
     input: { title: string; taskMd: string },
   ): Promise<Exercise> {
     return db.tx(async (q) => {
+      // Inside the transaction, unlike the other demo caps: this one counts
+      // rows in the very table it is about to insert into, so checking outside
+      // would let two simultaneous creates both see one and both write.
+      // Everything else §9f guards is a rare enough action that the race is
+      // theoretical; here the teacher's page has a button for it.
+      if (await isDemoAccount(q, actorId)) {
+        const { rows: mine } = await q.query<{ n: string }>(
+          `SELECT count(*) AS n FROM exercise WHERE teacher_id = $1`,
+          [actorId],
+        );
+        if (Number(mine[0]?.n ?? 0) >= DEMO_MAX_EXERCISES) {
+          throw new ServiceError(
+            'demo_not_allowed',
+            `A demo account can hold ${DEMO_MAX_EXERCISES} exercises. Delete one to write another.`,
+          );
+        }
+      }
+
       const { rows } = await q.query<{ id: number }>(
         `INSERT INTO exercise (teacher_id, title, task_md) VALUES ($1, $2, $3) RETURNING id`,
         [actorId, input.title, input.taskMd],

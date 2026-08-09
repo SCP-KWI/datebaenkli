@@ -10,7 +10,7 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import { join } from 'node:path';
 import Fastify from 'fastify';
-import { startLimiterSweeper, stopLimiterSweeper } from './auth/ratelimit.js';
+import { ipRequestLimiter, startLimiterSweeper, stopLimiterSweeper } from './auth/ratelimit.js';
 import { startSessionSweeper, stopSessionSweeper } from './auth/session.js';
 import { ensureBootstrapAdmin } from './bootstrap.js';
 import { config } from './config.js';
@@ -28,6 +28,7 @@ import { registerAuthHooks } from './http/auth.js';
 import { HttpError, registerErrorHandler } from './http/errors.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerClassRoutes } from './routes/classes.js';
+import { registerDemoRoutes } from './routes/demo.js';
 import { registerExerciseRoutes } from './routes/exercises.js';
 import { registerLessonRoutes } from './routes/lesson.js';
 import { registerPageRoutes } from './routes/pages.js';
@@ -39,6 +40,7 @@ import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { makeCatalogReader } from './services/catalog.js';
 import { makeExerciseService } from './services/exercise.js';
 import { makeImporter } from './services/import.js';
+import { makeDemoService } from './services/demo.js';
 import { makeLessonReader } from './services/lesson.js';
 import { startArchiveSweeper, stopArchiveSweeper } from './services/lifecycle.js';
 import { makeProvisioner } from './services/provision.js';
@@ -125,6 +127,36 @@ app.addContentTypeParser(
  * carrying the session cookie, because SameSite=Lax treats every sibling app on
  * the same registrable domain as same-site.
  */
+/**
+ * A ceiling on API requests per address (phase 10, HANDOFF §9h).
+ *
+ * Before the demo there was no request-rate limit anywhere, and that was
+ * defensible: everyone holding a session was a named account in a school, and
+ * what bounds a student's *database* is enforced by Postgres per role. A public
+ * demo removes the first half of that — the session belongs to a stranger — so
+ * the HTTP layer needs its own floor.
+ *
+ * Applied to `/api` only. The pages and `/assets` are static files served by
+ * `@fastify/static`, and throttling a classroom's stylesheet is how a lesson
+ * ends up looking broken for the reason nobody guesses.
+ *
+ * Deliberately *before* authentication rather than keyed on the account: the
+ * cost of a request is incurred whether or not the cookie turns out to be
+ * valid, and an attacker without one would otherwise be the only unlimited
+ * caller.
+ */
+app.addHook('onRequest', async (req, reply) => {
+  if (!req.url.startsWith('/api/')) return;
+
+  const wait = ipRequestLimiter.retryAfterMs(req.ip);
+  if (wait > 0) {
+    const seconds = Math.ceil(wait / 1000);
+    void reply.header('Retry-After', String(seconds));
+    throw new HttpError(429, 'too_many_requests', `Slow down. Try again in ${seconds} seconds.`);
+  }
+  ipRequestLimiter.fail(req.ip);
+});
+
 app.addHook('onRequest', async (req) => {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
   if (!req.url.startsWith('/api/')) return;
@@ -345,6 +377,10 @@ const lesson = makeLessonReader({
   workspacesByUser: exercises.workspacesByUser,
 });
 
+// Phase 10. Takes the same two handles every other service does; the demo is an
+// ordinary consumer of `provision.ts`'s seams and adds none of its own.
+const demo = makeDemoService({ db, prov });
+
 await app.register(fastifyCookie, { secret: config.secrets.session });
 
 registerErrorHandler(app);
@@ -411,6 +447,7 @@ registerWorkspaceRoutes(app, db, prov, catalog, importer, quota, exercises);
 registerExerciseRoutes(app, db, exercises);
 registerLessonRoutes(app, db, lesson, catalog);
 registerAdminRoutes(app, db, prov);
+registerDemoRoutes(app, db, demo);
 
 async function start(): Promise<void> {
   const log = {

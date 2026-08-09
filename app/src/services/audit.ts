@@ -49,7 +49,16 @@ export type AuditAction =
   | 'exercise_deleted'
   | 'exercise_distributed'
   | 'exercise_taken_back'
-  | 'exercise_workspace_reset';
+  | 'exercise_workspace_reset'
+  // --- phase 10: the public demo ---
+  //
+  // `demo_claimed` carries `actorId: null` and always will: the actor is a
+  // stranger with no account, which is the whole point of the feature. It is
+  // the only audited action in the app with no person behind it, and the row
+  // is still worth writing — it is what says how heavily the demo is used and,
+  // when a slot misbehaves, which visit to correlate against.
+  | 'demo_claimed'
+  | 'demo_pool_ensured';
 
 export async function audit(
   db: Queryable,

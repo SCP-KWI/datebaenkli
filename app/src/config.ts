@@ -328,6 +328,40 @@ export const config = {
   },
 
   /**
+   * The public demo (phase 10, HANDOFF §9).
+   *
+   * **Off by default, and that is the important line in this block.** Turning it
+   * on creates real Postgres login roles whose accounts are handed to strangers
+   * with no credential; an instance that has not decided to do that must not
+   * acquire the capability by upgrading. The pool is also not created by merely
+   * setting this — `POST /api/admin/demo/ensure` is a second, deliberate act by
+   * a real admin (§9c).
+   */
+  demo: {
+    enabled: bool('DBK_DEMO_ENABLED', false),
+    /**
+     * Claimable accounts per side. The ceiling on concurrent visitors, and
+     * therefore on load: each one is `roleConnectionLimit` backends and one
+     * `studentQuotaMb` of disk.
+     *
+     * A teacher slot costs more than a student slot — it carries a class of
+     * three fixture students, whose schemas a reset also wipes — which is why
+     * the two are separate numbers rather than one pool size.
+     */
+    students: int('DBK_DEMO_STUDENTS', 8, { min: 1, max: 50 }),
+    teachers: int('DBK_DEMO_TEACHERS', 3, { min: 1, max: 20 }),
+    /**
+     * How long a visitor gets. Enforced as a per-session ceiling that activity
+     * cannot move (auth/session.ts), not as an idle timeout.
+     *
+     * The floor is 5 minutes because a lease shorter than that expires while
+     * somebody is still reading the first page, and the ceiling is 4 hours
+     * because a lease is also how long a slot is unavailable to everyone else.
+     */
+    leaseMs: int('DBK_DEMO_LEASE_MINUTES', 30, { min: 5, max: 240 }) * 60_000,
+  },
+
+  /**
    * How many reverse proxies sit in front of us. `req.ip` is taken that many
    * hops from the right of X-Forwarded-For.
    *

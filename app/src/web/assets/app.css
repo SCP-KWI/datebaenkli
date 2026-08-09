@@ -698,6 +698,64 @@ dialog::backdrop {
   backdrop-filter: blur(2px);
 }
 
+/* The demo countdown (phase 10), and the login page's demo buttons.
+
+   Shared rather than page-scoped because the banner is mounted by `util.js`
+   onto whichever of the five pages a visitor happens to be on — it has no page
+   of its own, which is exactly why it lives above this line.
+
+   Fixed to the bottom, not the top: the top bar is where the account name and
+   the theme toggle already are, and a second fixed strip up there pushes the
+   editor's grid down on every page including the four with no demo. Bottom-left
+   also keeps it clear of the `.help-fab`, which is bottom-right. */
+.demo-bar {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.45rem 0.45rem 0.8rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r);
+  /* Opaque, not a mix: it floats over the SQL grid, and a translucent strip
+     over a table of numbers is unreadable in exactly the mode nobody tests. */
+  background: var(--surface);
+  box-shadow: 0 2px 10px color-mix(in oklch, var(--ink) 18%, transparent);
+  font-size: 0.85rem;
+}
+.demo-bar .btn {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.85rem;
+}
+@media (max-width: 560px) {
+  /* Full width at the bottom rather than a floating pill: on a phone the pill
+     covers the last row of whatever is on screen. */
+  .demo-bar {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+    border-left: none;
+    border-top: 3px solid var(--accent);
+    justify-content: space-between;
+  }
+}
+
+.demo-start {
+  margin-top: 1.2rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.demo-start p {
+  margin: 0 0 0.2rem;
+}
+
 /* ============================================================================
    Page-specific. Everything above is shared by all six pages.
    ============================================================================ */

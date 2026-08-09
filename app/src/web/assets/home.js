@@ -9,7 +9,7 @@
  */
 
 import { apply, formats, load, paintCached, t, wireLanguageSelect } from '/assets/i18n.js';
-import { esc, mountVersion, wireThemeToggle } from '/assets/util.js';
+import { esc, mountDemoBanner, mountVersion, wireThemeToggle } from '/assets/util.js';
 
 const get = async (url) => {
   const response = await fetch(url);
@@ -44,6 +44,9 @@ else {
   // currently points, which no `data-i18n` key can express.
   paintTheme();
   wireLanguageSelect(byId('lang'));
+  // The demo countdown, if this session is a demo lease. `me.demo` is null for
+  // every real account, so the call is unconditional (HANDOFF §9g).
+  mountDemoBanner(me.demo, t);
   mountVersion(byId('version'), (d) => formats().dateTime(d));
 
   byId('name').textContent = user.displayName;

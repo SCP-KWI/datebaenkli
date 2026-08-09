@@ -92,6 +92,13 @@ export async function sweepInactiveStudents(
         -- schema. setUserState refuses that outright (restore_first), so
         -- without this line the sweep would throw on it every night.
         AND archive_path IS NULL
+        -- Phase 10. A demo slot is idle by design: between visitors nobody
+        -- touches it, and a pool that has been quiet for a year is a pool
+        -- working exactly as intended. Sweeping one sets its role NOLOGIN,
+        -- which does not fail loudly: a claim would hand the next visitor a
+        -- session whose Postgres role cannot connect, and the demo would
+        -- appear broken for a reason nothing in the demo code could explain.
+        AND NOT demo
         AND coalesce(last_active_at, created_at) < now() - make_interval(days => $1::int)
       ORDER BY id`,
     [config.lifecycle.archiveAfterDays],

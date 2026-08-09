@@ -80,6 +80,29 @@
         <button type="submit" class="primary">Anmelden / Sign in</button>
       </form>
       <p id="error" role="alert" class="banner banner-bad"></p>
+
+      <!--
+        The demo, hidden until `/api/demo` says this instance offers one — most
+        do not, and a button that answers 404 is worse than no button.
+
+        Bilingual literals like everything else on this page, and for the same
+        reason: it never loads `i18n.js`. Note there is no username and no
+        password here on purpose (HANDOFF §9d) — a published credential would
+        make the per-account login throttle a lever any stranger can pull to
+        lock the demo for everyone.
+      -->
+      <div id="demo" class="demo-start" hidden>
+        <p class="muted small">
+          Oder ohne Konto ausprobieren — die Daten werden danach zurückgesetzt.<br />
+          <span lang="en">Or try it without an account — the data is reset afterwards.</span>
+        </p>
+        <button type="button" id="demo-student" class="btn">
+          Als Schüler:in / As a student
+        </button>
+        <button type="button" id="demo-teacher" class="btn">
+          Als Lehrperson / As a teacher
+        </button>
+      </div>
     </div>
 
     <!-- Bilingual and carrying no `data-i18n`, unlike the other five: this page

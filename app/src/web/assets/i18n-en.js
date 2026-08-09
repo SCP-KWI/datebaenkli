@@ -606,4 +606,13 @@ export default {
   'error.too_many_sources': 'An exercise may hold at most 20 tables or scripts.',
   'error.csv_types_rejected':
     'Some values do not fit the chosen data types. Fix the types or the file.',
+
+  'demo.left': 'Demo — {minutes} minutes left',
+  'demo.soon': 'Demo — this session ends in a moment',
+  'demo.end': 'End now',
+  'demo.over': 'The demo session has ended.',
+  'error.demo_pool_busy': 'Every demo account is in use right now. Try again in a few minutes.',
+  'error.demo_not_allowed': 'A demo account cannot do that. Everything else works normally.',
+  'error.demo_disabled': 'The demo is not enabled on this installation.',
+  'error.too_many_requests': 'Too many requests. Wait a moment.',
 };

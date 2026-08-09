@@ -247,6 +247,52 @@ export async function teacherOwnsStudent(
   return rows.length > 0;
 }
 
+// --- the demo caps -----------------------------------------------------------
+
+/**
+ * Refuse an action to a demo account (phase 10, HANDOFF §9f).
+ *
+ * Lives here rather than in `services/demo.ts` for one reason and it is not
+ * taste: `demo.ts` imports `classes.ts` and `users.ts` to build the pool, so a
+ * cap defined there and enforced in either of them is a cycle.
+ *
+ * **What it protects against is not abuse, it is accumulation.** A demo teacher
+ * enrolling three students burns three identifiers *permanently* —
+ * `takenIdentifiers` includes `deleted` rows on purpose, because a re-issued
+ * `pg_role` is a re-issued schema name and the next student would land in the
+ * previous one's tables. Twenty demos would leave sixty tombstoned accounts in
+ * every roster query and sixty dumps in the archive. So the demo teacher's
+ * class arrives pre-built and they may not create or destroy accounts; what
+ * they *can* do — write exercises, hand them out, read the hand-ins, watch the
+ * lesson view — is the part worth showing anyway.
+ *
+ * One query per guarded call. Every one of them is a rare administrative
+ * action, so caching this would be optimising the path nobody is on.
+ */
+export async function assertDemoMayNot(
+  db: Queryable,
+  actorId: number,
+  what: string,
+): Promise<void> {
+  const { rows } = await db.query<{ demo: boolean }>(`SELECT demo FROM app_user WHERE id = $1`, [
+    actorId,
+  ]);
+  if (rows[0]?.demo === true) {
+    throw new ServiceError(
+      'demo_not_allowed',
+      `This is a demo account, so it cannot ${what}. Everything else works normally.`,
+    );
+  }
+}
+
+/** True if this account belongs to the demo world. */
+export async function isDemoAccount(db: Queryable, userId: number): Promise<boolean> {
+  const { rows } = await db.query<{ demo: boolean }>(`SELECT demo FROM app_user WHERE id = $1`, [
+    userId,
+  ]);
+  return rows[0]?.demo === true;
+}
+
 // --- authentication ----------------------------------------------------------
 
 let dummyHash: Promise<string> | undefined;
@@ -489,6 +535,11 @@ export async function createStudents(
 ): Promise<CreatedUser[]> {
   if (people.length === 0) throw new ServiceError('empty_batch', 'No students given.');
 
+  // The cap that matters most (HANDOFF §9f): enrolment is what burns
+  // identifiers permanently, and a demo teacher's three students arrive with
+  // the account.
+  await assertDemoMayNot(db, actorId, 'enrol students');
+
   // Validate and hash the whole batch *before* opening the transaction: these
   // steps need no database, and scrypt on 25 students would otherwise hold a
   // pool connection for seconds (see prepareCredential). Concurrently, because
@@ -635,6 +686,20 @@ export async function setUserState(
   // also carries the *previous* state and `archive_path`, which is what tells
   // `applyStateToPostgres` that "make this active" means a restore.
   const identity = await pgIdentity(db, userId);
+
+  // The *actor* only. A demo teacher must not archive or delete anyone: that is
+  // the identifier burn §9f exists to prevent, and deleting one of their own
+  // three fixture students would leave the slot permanently short of a class.
+  //
+  // The demo account as a *target* is deliberately not blocked — an admin
+  // shrinking the pool is a real thing to want, and it is the one caller here
+  // who is outside the demo and acting on purpose. What must never touch these
+  // accounts is the nightly sweep, and that is excluded at its own query
+  // (`lifecycle.ts`) rather than here, because `actorId` is null for both the
+  // sweep and the reconciler and this check cannot tell them apart.
+  if (actorId !== null) {
+    await assertDemoMayNot(db, actorId, 'archive or delete accounts');
+  }
 
   if (state === 'cold') {
     if (identity === undefined || identity.role !== 'student') {

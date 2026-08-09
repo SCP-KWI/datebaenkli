@@ -166,3 +166,63 @@ export async function mountVersion(element, formatDate) {
   const stamp = info.builtAt ? formatDate(new Date(info.builtAt)) : 'dev';
   element.textContent = `v${info.version} · ${stamp}`;
 }
+
+/**
+ * The demo countdown (phase 10, HANDOFF §9g).
+ *
+ * A demo session stops after 30 minutes whether or not anyone is typing, and
+ * the server enforces that on the *next* request — so without this the visitor
+ * finds out by pressing Run and getting a 401. The banner is not decoration; it
+ * is the difference between an ending and a fault.
+ *
+ * Takes `t` rather than importing `i18n.js`: this module is imported by every
+ * page including ones that never load a catalogue, and a static import would
+ * pull the whole i18n layer onto `/login`.
+ *
+ * `demo` is `/api/me`'s field — null for every real account, which is what makes
+ * the call safe to make unconditionally from a page script.
+ */
+export function mountDemoBanner(demo, t) {
+  if (!demo) return;
+
+  const bar = document.createElement('div');
+  bar.className = 'demo-bar';
+  bar.setAttribute('role', 'status');
+  const label = document.createElement('span');
+  const end = document.createElement('button');
+  end.type = 'button';
+  end.className = 'btn';
+  end.textContent = t('demo.end');
+  bar.append(label, end);
+  document.body.append(bar);
+
+  const deadline = new Date(demo.expiresAt).getTime();
+
+  function tick() {
+    const left = deadline - Date.now();
+    if (left <= 0) {
+      // `replace`, not `href`: the expired page must not sit in the history for
+      // a Back button to return to, where it would look alive and answer 401 to
+      // everything.
+      location.replace('/login');
+      return;
+    }
+    // Rounded *up*, so the banner never says "1 minute" for the 30 seconds
+    // after it stopped being true. The last minute gets a sentence of its own
+    // rather than counting seconds — see the catalogue.
+    const minutes = Math.ceil(left / 60000);
+    label.textContent = minutes <= 1 ? t('demo.soon') : t('demo.left', { minutes });
+  }
+
+  tick();
+  // Every 15 seconds rather than every second: the display moves once a minute,
+  // and this way the tab is idle 59/60 of the time.
+  const timer = setInterval(tick, 15000);
+
+  end.addEventListener('click', async () => {
+    end.disabled = true;
+    clearInterval(timer);
+    await fetch('/api/demo/end', json({})).catch(() => {});
+    location.replace('/login');
+  });
+}

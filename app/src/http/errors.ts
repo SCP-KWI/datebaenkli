@@ -99,6 +99,22 @@ const SERVICE_ERROR_STATUS: Record<string, number> = Object.assign(Object.create
    */
   exercise_not_open: 409,
   exercise_not_found: 404,
+  // --- phase 10: the public demo ---
+  /**
+   * Every slot is leased. A 503 rather than a 429: the caller has done nothing
+   * wrong and no amount of slowing down helps them — the resource is genuinely
+   * occupied, and `Retry-After` is a real answer here in a way it is not for a
+   * rate limit.
+   */
+  demo_pool_busy: 503,
+  /** The demo is off on this instance. The route 404s before reaching this. */
+  demo_disabled: 404,
+  /**
+   * A demo teacher hit one of §9f's caps. 403 rather than 409: the account is
+   * in no unusual state, it simply may not do this — and the message is the
+   * one thing a demo visitor reads that explains the demo is a demo.
+   */
+  demo_not_allowed: 403,
   source_not_found: 404,
   class_not_found: 404,
   teacher_not_found: 404,

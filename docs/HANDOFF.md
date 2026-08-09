@@ -200,6 +200,25 @@ that way.
 
 ## 0. Start here (read this before opening any file)
 
+**Phase 10 — the public demo — is BUILT and NOT DEPLOYED** (2026-08-09). **§9 is
+the design and the whole argument**; read it before touching anything with `demo`
+in the name, because four of its decisions look like arbitrary complication
+without the reasoning and two of them were taken against the more obvious
+alternative. The short version: a *pool* of leased accounts rather than one
+shared login, reset on claim rather than on logout, and no published credential
+at all.
+
+Two things it changed outside its own files, and each is a place a stale
+assumption now bites:
+
+- **`refreshSession` takes the loaded session, not its `expiresAt`**, and
+  returns the expiry the row actually holds rather than the one it asked for.
+  The old version handed the cookie a date the `LEAST` had already clamped.
+- **`/api/*` has a per-IP request budget** (`server.ts`), the first
+  request-rate limit this app has ever had. If something starts answering 429
+  during a lesson, that hook is the thing to look at, and `ipRequestLimiter`'s
+  comment says how the number was chosen.
+
 **Phase 9 — exercises — is DEPLOYED** (2026-08-07). Production serves `0.9.0`
 and there is nothing undeployed. It was the second migration this project has
 done; §7's phase-9 subsection records the run, and the short version is that it
@@ -2824,6 +2843,54 @@ block was checked by parsing the YAML only.
 
 ## 5. What is verified, and what is not
 
+### Phase 10, verified 2026-08-09 — locally only
+
+All four nets, against a throwaway PostgreSQL 18.4 cluster:
+
+| | result |
+|---|---|
+| `npm test` | 422 registered, **330 pass, 0 fail** (live suites skipped) |
+| the whole tree with a server | **415 pass, 0 fail, 0 skipped** |
+| `db/verify-isolation.sh` | **41/41** (unchanged — the demo adds no fixture) |
+| `db/verify-auth.sh` | **95/95** (unchanged) |
+
+And the loop driven over HTTP against a real running app, which is the §4dd
+standard applied to a feature whose whole claim is about state *between* users:
+
+- the pool created by `POST /api/admin/demo/ensure` — one teacher with a
+  pre-seeded class of three, two claimable students;
+- a visitor claimed a slot, ran `CREATE TABLE geheim`, read it back;
+- `POST /api/demo/end` killed the cookie, and the **next claim on that same
+  slot** could not see `geheim` — reset-on-claim doing the one thing it exists
+  for;
+- a third claim against a full pool answered `503 demo_pool_busy` rather than
+  sharing;
+- the teacher's four caps all refused with `demo_not_allowed`, and the third
+  exercise refused while the first two were written;
+- re-claiming the teacher dropped its exercises and **left the pre-seeded class
+  with its three students**;
+- `/api/admin/usage` marked exactly the demo schemas and nothing else;
+- `/login` revealed the two buttons only because `/api/demo` said `enabled`,
+  and the countdown rendered `Demo — noch 30 Minuten` on `/sql`.
+
+**Not verified, and the list is short but real:**
+
+- **Nothing on production.** The demo has never run on the deployed instance,
+  and `DBK_DEMO_ENABLED` has never been set there.
+- **The 30 minutes actually elapsing.** Every ceiling assertion is either a unit
+  test with a hand-set `hard_expires_at` or a fresh lease — nobody has watched a
+  real session die at the wall clock, or seen the banner's `location.replace`
+  fire. It takes half an hour of not touching a tab, which is the same shape as
+  §5's old overnight locale check and should be run the same way.
+- **Two visitors claiming in the same millisecond.** `SKIP LOCKED` is what makes
+  that safe and the sequential test only shows that two claims differ. A real
+  concurrent race has not been staged.
+- **The per-IP request budget firing during an honest lesson.** 600 per five
+  minutes was chosen against the busiest page, not measured against one. The
+  first lesson after deployment is the test, and a 429 in a classroom is what it
+  looks like if the number is wrong.
+- **The demo under a class's worth of load.** Pool size (§9k) is a guess.
+
 ### Phase 9, verified 2026-08-07
 
 All four nets, against real PostgreSQL 18.4 on the throwaway cluster:
@@ -4198,9 +4265,23 @@ The driver's real message is in the app log — `grep 'could not get a connectio
 
 ## 8. Next session should
 
-**Nothing is outstanding in the code.** Phase 9 is built, tested, deployed and in
-step with the server. What follows is a menu, and only the first item has a
-deadline shape.
+**Phase 10 — the public demo — is built and NOT deployed** (2026-08-09). §9 is
+the design and the status. What is left is not code:
+
+1. **Deploy it**, with `DBK_DEMO_ENABLED` decided. Read §4vv first. The version
+   bump to `0.10.0` belongs to that deploy.
+2. **Then `POST /api/admin/demo/ensure` once**, and check the pool with
+   `GET /api/admin/demo`. Until that runs there are no demo accounts, and the
+   buttons on `/login` answer `demo_pool_busy`.
+3. **Decide the pool size and whether to link it publicly** — §9k, and the two
+   are the same question.
+
+Everything below this paragraph predates phase 10 and described a tree with
+nothing outstanding.
+
+**Otherwise nothing is outstanding in the code.** Phase 9 is built, tested,
+deployed and in step with the server. What follows is a menu, and only the first
+item has a deadline shape.
 
 **1. Use it in a lesson, and close §5's production gap while you are there.**
 The one thing neither the suites nor the deploy can establish is what happens
@@ -4415,3 +4496,228 @@ The numbered list below is the rest, and it is a menu rather than a queue.
    deliberately keep the realistic names — they were never the exposed half.
 
 8. Keep architecture §10 and this file current.
+
+---
+
+## 9. Phase 10 — the public demo (BUILT 2026-08-09, NOT DEPLOYED)
+
+**Status.** Everything in §9j is built and green: 348 unit tests (18 new in
+`test/demo.test.mjs`), 421 with the live suites against a real cluster,
+`verify-isolation.sh` 41/41, `verify-auth.sh` 95/95, and the whole loop driven
+over HTTP against a throwaway server — pool created, a visitor claiming a slot
+and leaving a table behind, the slot handed back, the next claim finding it
+wiped, a full pool refusing, the teacher's caps all four refusing, and the
+countdown banner rendering on `/sql`. §5 says what that run did **not** cover.
+
+**It is off by default and the pool does not exist yet.** `DBK_DEMO_ENABLED` is
+`false` unless set, and even with it set the accounts are created only by
+`POST /api/admin/demo/ensure` (§9c). Nothing about an upgrade turns this on.
+
+**Not deployed, and the version is still `0.9.0`.** The bump belongs to the
+deploy, the way every previous phase did it — see §7, and read §4vv first
+because `up -d` succeeding proves nothing.
+
+
+
+A link anyone can follow to try the app: one click gives you a working student
+account for 30 minutes, another gives you a teacher account with a class already
+in it. No credential is published, nothing has to be typed, and the next visitor
+starts from a clean schema.
+
+This section is the design and the argument behind each decision. It was written
+before the code, deliberately — four of the decisions below are only defensible
+if the reasoning is on paper, and two of them look like arbitrary complication
+without it. When the phase is deployed, the load-bearing ones move up into §3 and
+this section becomes the record of how they were reached.
+
+### 9a. The one decision everything follows from
+
+**A pool of pre-provisioned accounts handed out on a lease — not a shared
+login.** `u_demo_gast_1..N` for the student side, `t_demo_1..M` for the teacher
+side, all created once and reset between visitors.
+
+The obvious design is one account per role with a published password, and it
+fails on three separate counts, each of which was checked against the code rather
+than assumed:
+
+1. **Every rail that protects a student is per-role, so a shared account shares
+   them.** `CONNECTION LIMIT 4` on the role and `poolMaxPerUser: 2`
+   (`config.ts`) are per Postgres role, as is the 50 MB quota, which
+   `quota.ts` measures *by owner* across the playground and every exercise
+   workspace. Two visitors at once contend for two pooled connections; one
+   visitor's `generate_series` fills the quota and the next person's CSV import
+   is refused for space they never used.
+2. **Reset-on-logout is the wrong trigger, in both directions.** Nobody logs out
+   of a demo — they close the tab, and `POST /api/logout` never runs, so the
+   freshness guarantee mostly would not fire. When it *did* fire it would drop
+   the tables of whoever else was working in the same schema.
+3. **It demonstrates the opposite of the product.** The one invariant is that
+   Postgres, not app code, enforces per-student isolation. A demo where every
+   visitor shares one schema is a demo of that invariant being absent.
+
+The pool answers all three: each visitor gets a real isolated role, the pool size
+is a hard ceiling on aggregate load (N × 4 backends), and "reset" is a whole
+account nobody else is in.
+
+### 9b. Reset happens on **claim**, never on release
+
+Release paths are all skippable — tab close, crash, redeploy, an expired lease
+nobody swept. Claim is the one moment that is guaranteed to run before a visitor
+sees anything, so it is where freshness is established. A release-time reset may
+exist as hygiene; **nothing may depend on it.**
+
+A reset is three things, and missing any one of them leaks the previous visitor's
+work to the next:
+
+- `resetSchema(pgRole, teacherRoles)` — the playground.
+- `listWorkspaces(pgRole)` then `dropWorkspace` for each — the exercise
+  workspaces. `resetSchema` does not touch these; a demo student who opened an
+  exercise leaves an `x7_u_demo_gast_1` schema behind that survives it.
+- For a teacher account: delete the exercises it owns, and restore the class
+  fixture (9e).
+
+**No new SQL builder.** All three go through seams that already exist in
+`provision.ts`, which is what keeps this phase on the right side of CLAUDE.md's
+"a third such file needs the argument made explicitly". `services/demo.ts` is a
+second caller of existing builders, exactly as `exercise.ts` was for
+`createAndFill`. If a future edit finds itself wanting to concatenate an
+identifier in `demo.ts`, that is the signal that the seam belongs in
+`provision.ts` instead.
+
+### 9c. Pre-provisioned, not provisioned on demand
+
+Creating a demo role per visitor is the more elegant-looking design and it is
+unsafe on a public endpoint for a specific, already-known reason:
+`ensureStudent` issues `GRANT CONNECT ON DATABASE`, which updates a single
+`pg_database` row. That is precisely why every live test suite serialises through
+`test/support/live-lock.mjs` — two at once get `XX000 tuple concurrently
+updated`. Two visitors clicking the demo button in the same second would hit the
+same collision, on the one route where the audience is strangers and the failure
+is the first thing they ever see of the app.
+
+A pre-provisioned pool claims a lease with one `UPDATE … WHERE expires_at IS NULL
+OR expires_at < now()` in the meta database and touches no database ACL at all.
+
+### 9d. The button, and why nothing is published
+
+`/login` gains two buttons which POST to a public `/api/demo/start`. The server
+picks a free lease, resets it, opens a 30-minute session, sets the cookie and
+redirects. The visitor never sees a username or a password.
+
+Three things follow from there being no credential, and the third is the one that
+decided it:
+
+- **It decouples what is advertised from what is handed out.** "Two demo logins,
+  student and teacher" stays true as a description while the server hands out one
+  of N isolated accounts. A published username and password cannot do that — it
+  names one specific account, and 9a is then unavoidable.
+- **A published password can never be rotated** out of the slide decks, mails and
+  blog posts that copied it.
+- **`accountLimiter` would become a public denial-of-service lever.** It is 10
+  failures per 15 minutes *per account* (`auth/ratelimit.ts`), sized against
+  `generateSlipPassword`'s 29.1 bits. Against a published username anyone can
+  spend that budget on purpose and lock the demo for everyone, and the only
+  recovery is restarting the container. The alternative — exempting demo accounts
+  from the account limiter — is a hole deliberately cut in the brute-force
+  defence for the one account whose name is public. The button means the question
+  never arises.
+
+### 9e. The demo login cannot be `student@datebaenkli.ch`
+
+`app_user.username` is unconstrained text and `authenticate` matches on
+`lower(username)`, so an email *would* log in. `pg_role` cannot be one — it is
+the Postgres role and the schema name, and `db/ident.ts` holds it to
+`^[ut]_[a-z0-9_]*`.
+
+So the email version buys a student who signs in as `student@datebaenkli.ch` and
+must then type `SELECT * FROM u_demo_gast_1.kunden`. That splits the one string
+§3 calls deliberate, and it splits it in the demo — where the reader has the
+least context to absorb the split and the most reason to conclude the app is
+confusing. 9d's button makes it moot: nobody types a name.
+
+### 9f. The demo teacher gets a pre-seeded class and cannot enrol
+
+Decided 2026-08-09, against the more faithful-looking alternative, because of a
+trap in `users.ts` that is easy to walk into:
+
+**`takenIdentifiers` deliberately includes `deleted` rows** (`users.ts`, and the
+comment there says why: a re-issued `pg_role` is also a re-issued *schema* name,
+and the next student would land in the previous one's tables owning everything in
+them). Deletion is a state change, not a row removal. So every demo teacher who
+enrols three students **burns three identifiers permanently** and writes a
+`pg_dump` per student into the archive, which has six-month retention. Twenty
+demos is 60 tombstoned accounts in every roster query and 60 junk dumps on disk.
+
+Therefore: each `t_demo_*` account owns one class with three students, created
+once as a fixture. Its caps are **0 new classes, 0 new students, 2 exercises**.
+The enrolment flow is visible in the demo but not performable, which is the one
+thing given up, and it is cheaper than the alternative — which was a narrow,
+written-down exception to the never-reuse rule, hard-deleting demo rows on reset
+so the names free up. That exception remains available if the demo turns out to
+need it; it must not be added silently.
+
+### 9g. The session ceiling already exists
+
+`refreshSession` clamps rolling extension to `created_at + absoluteTtlMs` in SQL,
+with `LEAST`. A 30-minute hard stop is that same expression with a different
+interval, so the work is making the ceiling **per session** rather than a global
+config constant — a nullable `session.hard_expires_at`, set at claim, included in
+the `LEAST`. Do **not** branch on the username inside `loadSession`.
+
+Two consequences to build for rather than discover:
+
+- **Expiry is enforced on the next request.** A visitor staring at the editor is
+  not kicked out; they get a 401 when they next press Run. A visible countdown on
+  the demo pages is therefore part of the feature, not decoration — it is the
+  difference between an ending and a fault.
+- **A demo session must not be extendable by activity.** The `LEAST` gives that
+  for free once the ceiling is per-session.
+
+### 9h. Rate limiting: what exists, and what is actually missing
+
+What exists counts **login failures only**. There is no request-rate limit
+anywhere in the app. But the per-role Postgres rails already bound a *logged-in*
+visitor hard: `statement_timeout` plus the watchdog's cancel/terminate,
+`work_mem`, `temp_file_limit`, 4 connections, the 16 MB result cap and the 50 MB
+quota. The demo does not need a query-rate limiter to be safe from SQL; the pool
+size is the aggregate limit.
+
+The real gaps are HTTP-shaped:
+
+- a per-IP budget across `/api/*`, counting *all* requests rather than failures;
+- a much tighter budget on `/api/demo/start` specifically, since a claim runs DDL
+  (a schema drop and recreate) and is the most expensive public thing in the app;
+- the CSV upload body size, which is the one route that takes a file from a
+  stranger.
+
+### 9i. Demo accounts must be invisible to the reports about real people
+
+`/api/admin/usage`, the archive sweeper (`lifecycle.ts` would otherwise archive
+an idle demo account and take it out of the pool), the teacher roster, and
+`verify-isolation.sh`'s `FIXTURES` guard all need to know these exist. The flag
+is `app_user.demo`.
+
+### 9j. Build order
+
+1. `meta/004_demo.sql` — `app_user.demo`, `session.hard_expires_at`, `demo_lease`.
+2. `services/demo.ts` — claim, reset, release. Takes `Db` and `Provisioner`, like
+   every other service.
+3. `routes/demo.ts` — `POST /api/demo/start`, public and throttled.
+4. The per-session ceiling in `auth/session.ts`.
+5. The caps in `classes.ts`, `users.ts`, `exercise.ts` — a counting check and a
+   `ServiceError`, mapped in `http/errors.ts`.
+6. The `/api/*` IP budget.
+7. The exclusions in 9i.
+8. `login.html` buttons (bilingual, like the rest of that page — it never loads
+   `i18n.js`) and the countdown.
+9. Tests: `test/demo.test.mjs` against PGlite for the lease bookkeeping and the
+   caps, and `test/demo.live.test.mjs` for what only a real cluster can show —
+   that a reset actually drops workspaces, and that two demo visitors cannot read
+   each other. The live suite takes the advisory lock like every other one.
+
+### 9k. Open questions, to be answered before it is deployed
+
+- **Pool size.** Starts at 8 students and 3 teachers, which is a guess. It is a
+  config value so it can move.
+- **Whether the demo is linked from anywhere public**, and therefore what load to
+  expect. Until it is linked, the exposure is whoever is told the URL.

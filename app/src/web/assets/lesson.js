@@ -14,7 +14,7 @@
  */
 
 import { apply, formats, load, paintCached, t, wireLanguageSelect } from './i18n.js';
-import { esc, mb, mountVersion, wireThemeToggle } from './util.js';
+import { esc, mb, mountDemoBanner, mountVersion, wireThemeToggle } from './util.js';
 
 const REFRESH_MS = 5000;
 
@@ -266,6 +266,9 @@ apply();
 // currently points, which no `data-i18n` key can express.
 paintTheme();
 wireLanguageSelect($('lang'));
+// The demo countdown, if this session is a demo lease. `me.demo` is null for
+// every real account, so the call is unconditional (HANDOFF §9g).
+mountDemoBanner(me.demo, t);
 mountVersion($('version'), (d) => formats().dateTime(d));
 
 /**

@@ -10,7 +10,7 @@
  * one from.
  */
 
-import { mountVersion } from '/assets/util.js';
+import { json, mountVersion } from '/assets/util.js';
 
 // `de-CH` hardcoded, and it is the one place that is right: this page has
 // no account to read a locale from, and it is German-first by design. The
@@ -57,3 +57,51 @@ form.addEventListener('submit', async (event) => {
     button.disabled = false;
   }
 });
+
+/**
+ * The demo buttons (phase 10, HANDOFF §9d).
+ *
+ * Revealed only if this instance offers a demo. The check is a fetch rather
+ * than something baked into the page because the pages are served as static
+ * bytes with no server-side substitution (`routes/pages.ts`) — the same
+ * constraint that makes this page bilingual instead of translated.
+ */
+const demo = document.getElementById('demo');
+
+fetch('/api/demo')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((info) => {
+    if (info?.enabled) demo.hidden = false;
+  })
+  .catch(() => {});
+
+for (const [id, role] of [
+  ['demo-student', 'student'],
+  ['demo-teacher', 'teacher'],
+]) {
+  document.getElementById(id).addEventListener('click', async (event) => {
+    const pressed = event.currentTarget;
+    error.textContent = '';
+    // Both, not just the one pressed: a claim takes a schema drop and recreate,
+    // and the second button during that is a second slot taken by one visitor.
+    for (const b of demo.querySelectorAll('button')) b.disabled = true;
+    try {
+      const response = await fetch('/api/demo/start', json({ role }));
+      const payload = await response.json();
+      if (!response.ok) {
+        error.textContent =
+          payload?.error?.code === 'demo_pool_busy'
+            ? 'Gerade sind alle Demo-Zugänge belegt. Versuch es in ein paar Minuten nochmals. / ' +
+              'Every demo account is in use right now. Try again in a few minutes.'
+            : (payload?.error?.message ?? 'Demo nicht verfügbar. / Demo unavailable.');
+        return;
+      }
+      location.href = payload.landing;
+    } catch {
+      error.textContent = 'Keine Verbindung zum Server. / No connection to the server.';
+    } finally {
+      for (const b of demo.querySelectorAll('button')) b.disabled = false;
+      pressed.focus();
+    }
+  });
+}

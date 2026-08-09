@@ -70,11 +70,28 @@ export function registerAdminRoutes(app: FastifyInstance, db: Db, prov: Provisio
   app.get('/api/admin/usage', adminOnly, async () => {
     const quotaBytes = config.limits.studentQuotaMb * 1024 * 1024;
     const schemas = await prov.schemaUsage();
+
+    // Phase 10: the demo's schemas are marked, not hidden (HANDOFF §9i).
+    //
+    // Hiding them was the first instinct and it is wrong in the direction this
+    // report exists to be right in: they are real bytes on the same disk, so a
+    // total that omits them answers "is 50 MB anywhere near the truth" with a
+    // number that is not the truth. Marking lets the page grey them out while
+    // the sums stay honest.
+    //
+    // Prefix-matched, because a student's schemas are their playground *and*
+    // `x<id>_<role>` per exercise — the same relationship `quota.ts` sums over.
+    const { rows: demoRoles } = await db.query<{ pgRole: string }>(
+      `SELECT pg_role AS "pgRole" FROM app_user WHERE demo AND pg_role IS NOT NULL`,
+    );
+    const isDemo = (schema: string): boolean =>
+      demoRoles.some((r) => schema === r.pgRole || schema.endsWith(`_${r.pgRole}`));
+
     return {
       quotaBytes,
       totalBytes: schemas.reduce((sum, s) => sum + s.bytes, 0),
       overQuota: schemas.filter((s) => s.bytes > quotaBytes).map((s) => s.schema),
-      schemas,
+      schemas: schemas.map((s) => ({ ...s, demo: isDemo(s.schema) })),
     };
   });
 }

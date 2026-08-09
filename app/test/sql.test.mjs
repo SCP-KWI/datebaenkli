@@ -97,7 +97,7 @@ test('meta: schema creates the expected tables', async () => {
   );
   assert.deepEqual(
     rows.map((r) => r.table_name),
-    ['app_user', 'audit_log', 'class', 'class_member', 'exercise',
+    ['app_user', 'audit_log', 'class', 'class_member', 'demo_lease', 'exercise',
      'exercise_assignment', 'exercise_source', 'exercise_workspace',
      'query_log', 'session', 'setting', 'submission'],
   );
