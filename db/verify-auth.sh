@@ -60,7 +60,12 @@ check "GET /login is public"                     200 "$B/login"
 # The handbook is linked from the login page, so a teacher who cannot get in is
 # the reader it is most for. A 401 here means the route lost its
 # `config: { public: true }` — and nobody would find that out until she did.
+#
+# Both documents, because a 200 for one proves nothing about the other: they are
+# two routes, two `COPY` entries and two `.dockerignore` allow-lines, and the
+# student one is served to the readers least likely to report a 404.
 check "GET /handbuch is public"                  200 "$B/handbuch"
+check "GET /handbuch-lernende is public"         200 "$B/handbuch-lernende"
 check "GET /api/me needs a session"              401 "$B/api/me"
 check "GET /api/teachers needs a session"        401 "$B/api/teachers"
 check "GET /api/classes needs a session"         401 "$B/api/classes"

@@ -101,12 +101,14 @@ services:
 
   datebaenkli-app:
     build:
-      # The repo root, not `./app`, since `/handbuch` was added: the handbook is
-      # `docs/handbuch.html` and there is deliberately only that one copy, so the
-      # build has to be able to see outside `app/`. `.dockerignore` at the root
-      # is what keeps the context small (pgdata, .git, node_modules, dist, and
-      # all of docs/ except the one file). `app/Dockerfile`'s header has the
-      # rest, including why its WORKDIR mirrors the repo layout.
+      # The repo root, not `./app`, since `/handbuch` was added: the handbooks
+      # are `docs/handbuch.html` and `docs/handbuch-lernende.html`, and there is
+      # deliberately only that one copy of each, so the build has to be able to
+      # see outside `app/`. `.dockerignore` at the root is what keeps the
+      # context small (pgdata, .git, node_modules, dist, and all of docs/ except
+      # those two files — it names them, so a third document has to be added
+      # there too). `app/Dockerfile`'s header has the rest, including why its
+      # WORKDIR mirrors the repo layout.
       context: .
       dockerfile: app/Dockerfile
     image: datebaenkli-app:latest

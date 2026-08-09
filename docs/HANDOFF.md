@@ -5305,3 +5305,52 @@ and a student created through the API:
 
 **Not verified:** print. The teacher's handbook has a `@media print` block that
 both documents now share, and nobody has sent this one to a printer.
+
+### 14d. It broke the image build, and `.dockerignore` was why
+
+The first `docker compose up -d --build` after the 0.10.4 pull failed:
+
+```
+cp: can't stat '../docs/handbuch-lernende.html': No such file or directory
+```
+
+`postbuild` was updated to copy both documents and `app/Dockerfile` was not, so
+the second one was never placed in `/build/docs/`. **But the file that actually
+gates this is `.dockerignore`**: it excludes `docs/*` and allows exactly the
+documents it names back in, so even a corrected `COPY` would have failed —
+the file was not in the build *context* at all, and Docker reports that as
+"can't stat", which reads like a typo rather than an ignore rule.
+
+**Four places, and only one of them can fail on the dev machine:**
+
+| file | what it holds |
+|---|---|
+| `docs/handbook-src/build.mjs` | `DOCUMENTS` — what gets generated |
+| `app/package.json` | `postbuild`'s `cp` — what lands in `dist/web` |
+| `app/Dockerfile` | the `COPY` into the build stage |
+| **`.dockerignore`** | the allow-list that lets it into the context |
+
+`npm run build` locally cannot catch the last two, because it runs in a repo
+where every file is present. This is the same trap `app/Dockerfile`'s comment
+about `tools/` records, one directory over, and the comment there already said
+what it would look like — "a missing file fails the image build loudly here
+rather than becoming a 404 on the server". It did exactly that, which is the
+good half: nothing shipped serving a 404.
+
+`db/verify-auth.sh` now checks **both** routes are public rather than one; a 200
+for `/handbuch` proved nothing about `/handbuch-lernende`, and the student
+handbook is served to the readers least likely to report a 404.
+
+**Verified this time by building the image, not by reasoning about it**:
+`docker build -f app/Dockerfile -t datebaenkli-app:local-verify .` succeeds and
+both files are in `/app/dist/web/` inside it, with the right titles.
+
+**No version bump for the fix.** 0.10.4 never deployed, so the image that
+finally runs is the first 0.10.4 there has been — bumping would have made
+`curl /api/version` report a number that had never been broken.
+
+**Worth doing and not done:** a test asserting that everything `postbuild`
+copies out of `docs/` is named in both `.dockerignore` and `app/Dockerfile`. It
+clears CLAUDE.md's bar for a new test file — it was wrong with nobody seeing it,
+and pure file reads can reach it. Four comments are the weaker version of that
+and are what is there now.

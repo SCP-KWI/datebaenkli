@@ -30,11 +30,19 @@ COPY app/src ./src
 # build-time tool does not break the image again. It is discarded with this
 # stage; only node_modules and dist reach the runtime layer.
 COPY app/tools ./tools
-# The one file, not `docs/`: the rest of that directory is 300 kB of Markdown
-# and a Puppeteer-driven generator that has no business in a build context.
-# `postbuild` copies it into dist/web, so a missing file fails the image build
-# loudly here rather than becoming a 404 on the server.
-COPY docs/handbuch.html /build/docs/handbuch.html
+# The built handbooks, not `docs/`: the rest of that directory is 300 kB of
+# Markdown and a Puppeteer-driven generator that has no business in a build
+# context. `postbuild` copies them into dist/web, so a missing file fails the
+# image build loudly here rather than becoming a 404 on the server.
+#
+# **Adding a third document means editing three files**, and the one that is
+# easy to miss is `.dockerignore` — it excludes `docs/*` and allows these back
+# by name, so a document absent from *that* list never reaches the context and
+# the failure here reads as "no such file" instead of "ignored". `postbuild` in
+# `package.json` is the third. None of it fails on the dev machine, where
+# `npm run build` runs in a repo that has every file; it fails in the image, on
+# the server, the way `tools/` above did.
+COPY docs/handbuch.html docs/handbuch-lernende.html /build/docs/
 RUN npm run build
 
 # prune to production deps for the runtime layer

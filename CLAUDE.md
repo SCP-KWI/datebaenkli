@@ -241,9 +241,19 @@ PGlite-backed test file no longer makes the peak worse — only the runtime.
 `npm run dev` serves `src/web`, where the editor bundle does not exist — only
 `postbuild` produces it, into `dist`. The SQL page's `/assets/editor.js` will
 404 under `dev`. Use `npm run build && npm start` when working on that page.
-`/handbuch` is the same shape for the same reason: `postbuild` copies
-`docs/handbuch.html` into `dist/web`, so it is the one checked-in copy and there
-is nothing under `dev` to serve.
+`/handbuch` and `/handbuch-lernende` are the same shape for the same reason:
+`postbuild` copies `docs/handbuch.html` and `docs/handbuch-lernende.html` into
+`dist/web`, so those are the one checked-in copy each and there is nothing under
+`dev` to serve.
+
+**A third handbook has to be added in four places, and only one of them fails on
+the dev machine.** `docs/handbook-src/build.mjs` (`DOCUMENTS`), `postbuild` in
+`app/package.json`, the `COPY` in `app/Dockerfile`, and — the one that bites —
+the allow-list in `.dockerignore`, which excludes `docs/*` and names each
+document it lets back in. 0.10.4 shipped with the first three done and broke the
+image build on the server; `npm run build` cannot catch it, because locally it
+runs in a repo where every file is present. `db/verify-auth.sh` checks both
+routes are public and is what catches the other half.
 
 `/uebungen` is the exercises page (phase 9) — German in the path where the other
 five are not, because it is the one URL a teacher types in front of a class and

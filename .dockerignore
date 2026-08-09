@@ -21,11 +21,19 @@ archive
 
 *.log
 
-# Only one file out of docs/ reaches the image: the handbook, which `postbuild`
-# copies into dist/web to serve at /handbuch. The rest is Markdown and a
-# Puppeteer-driven generator with its own node_modules.
+# Only the built handbooks reach the image; `postbuild` copies them into
+# dist/web to serve at /handbuch and /handbuch-lernende. The rest of docs/ is
+# Markdown and a Puppeteer-driven generator with its own node_modules.
+#
+# **Both lines are needed, and this file is the one that bites.** `docs/*`
+# excludes everything, so a new document is absent from the build *context* —
+# which means the `COPY` in the Dockerfile fails with "can't stat" and reads
+# like a missing file rather than an ignored one. 0.10.4 shipped with the
+# Dockerfile and `postbuild` updated and this file not, and that is exactly how
+# it failed.
 docs/*
 !docs/handbuch.html
+!docs/handbuch-lernende.html
 
 chalk-design-system
 db
