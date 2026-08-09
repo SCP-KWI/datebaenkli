@@ -4357,16 +4357,51 @@ it anywhere public — they are the same question).
 
 **Three operational items the deploy turned up, none of them code:**
 
-1. **`db/backup.sh`'s retention pass cannot delete `2026-07-28_205506`** —
-   `Permission denied`, almost certainly a root-owned directory from the first
-   bring-up while cron has run as the ordinary user ever since. The backup
-   itself is unaffected: the prune runs *after* the publish `mv`, so the run
-   completes and is then reported as `backup FAILED` by a trap whose message
-   names a `.partial` path that no longer exists. **This has been failing every
-   night since the run count passed `KEEP=14`**, visible only in the cron log,
-   which is how it survived to be found during a deploy. Two fixes and they are
-   separate: `chown` the stale directory, and make the trap's message tell the
-   truth about *which* step failed.
+1. ~~**`db/backup.sh`'s retention pass cannot delete `2026-07-28_205506`**~~ —
+   **the script half is fixed** (2026-08-09); the **host half is still open and
+   needs one `chown` on the server**, see below.
+
+   What it was: a `Permission denied` on a run from the first bring-up, owned by
+   root while cron has run as an ordinary user ever since. Under `set -e` the
+   bare `rm` aborted the script *after* the backup had been published, and the
+   EXIT trap then printed `backup FAILED … kept <stamp>.partial for inspection`
+   naming a path the `mv` had just renamed away. Read literally it said the dump
+   had failed; the truth was that the dump was perfect and a July directory
+   could not be deleted.
+
+   **It had been printing that every night since the run count passed
+   `KEEP=14`** — into a log file nobody reads. `--check`, the line that *is*
+   monitored, kept answering `ok` because it only ever looked at the newest
+   backup's age, and age cannot see a directory slowly filling.
+
+   Three changes, and the third is the one that would have caught it:
+
+   - retention failures no longer abort the run. They are collected, warned
+     about **with the owning user in the message** (permission is what this
+     always is, and the owner turns the fix into one `chown`), and the loop
+     keeps going — so one undeletable run no longer strands every older one
+     behind it.
+   - the trap knows whether the backup was published, so its message is true in
+     both directions. Exit codes now distinguish them: **1 = there is no usable
+     backup, 2 = the backup is good and retention needs a human.**
+   - `--check` counts the runs and answers 2 above `KEEP + 2`. The slack is
+     deliberate: a run in flight and a `.partial` awaiting its week are both
+     normal, and a monitor that cries on a normal night is worse than one that
+     waits for the second.
+
+   Verified against a throwaway cluster on all four paths — clean, prune-fails,
+   `--check`-over-count, and a pre-publish dump failure, which still names the
+   `.partial` and still exits 1.
+
+   **Still to do on the host**, and it is the actual disk-space fix:
+
+   ```bash
+   sudo chown -R "$(id -un):$(id -gn)" /mnt/data/datebaenkli/backups/2026-07-28_205506
+   DBK_BACKUP_DIR=/mnt/data/datebaenkli/backups bash db/backup.sh --check
+   ```
+
+   The next nightly run then collects it and everything that queued up behind
+   it. Nothing is lost meanwhile — the excess is old backups, not missing ones.
 2. **The scrub moved `backup.sh`'s and compose's default paths** from
    `/mnt/data` to `/mnt/bulk` (§7). Harmless here because `.env` sets both
    explicitly — checked, both point at `/mnt/data`. It would not be harmless on
