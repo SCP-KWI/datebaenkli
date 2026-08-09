@@ -156,3 +156,42 @@ test('pages: no inline event handlers or inline scripts survive', () => {
     assert.ok(!/\sstyle="/.test(html), `${page}: inline style`);
   }
 });
+
+/**
+ * The auth pages' submit buttons are **direct children** of their `<form>`.
+ *
+ * `app.css` styles them with `body[data-page='auth'] form > button`, and the
+ * child combinator is not cosmetic: as a plain descendant selector the same
+ * rule also caught the password reveal nested inside `.pw-field`, gave a 34 px
+ * slot a 44 px button plus a 1.1rem top margin, and put the eye half outside
+ * the field on the deployed 0.10.2 (HANDOFF §16).
+ *
+ * Narrowing the selector fixed that and moved the fragility: wrap a submit
+ * button in a `<div>` and it silently loses its height and spacing, with
+ * nothing failing. This is what fails instead.
+ *
+ * Deliberately not a check that the reveal is *unstyled* by that rule — that is
+ * layout, and there is no browser in this suite. This asserts the one half that
+ * is a fact about the markup.
+ */
+test('pages: the auth submit buttons are direct children of their form', () => {
+  for (const page of ['login.html', 'password.html']) {
+    const html = read(page).replace(/<!--[\s\S]*?-->/g, '');
+    const open = html.indexOf('<form');
+    assert.notEqual(open, -1, `${page}: no form`);
+    const form = html.slice(open, html.indexOf('</form>', open));
+
+    const submit = form.indexOf('<button type="submit"');
+    assert.notEqual(submit, -1, `${page}: no submit button in the form`);
+
+    // Every tag between the form and the submit, with the closed ones cancelled
+    // out. Anything left open is a wrapper the `> button` rule cannot see past.
+    const stack = [];
+    for (const [, slash, tag] of form.slice(0, submit).matchAll(/<(\/?)([a-z][a-z0-9]*)/g)) {
+      if (tag === 'form' || tag === 'input' || tag === 'br') continue;
+      if (slash) stack.pop();
+      else stack.push(tag);
+    }
+    assert.deepEqual(stack, [], `${page}: submit button is nested inside <${stack.join('><')}>`);
+  }
+});

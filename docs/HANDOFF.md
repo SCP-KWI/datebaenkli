@@ -2,12 +2,18 @@
 
 Running state document. Update it at the end of every working session.
 
-**Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the
-server serves `0.10.0` and the repo is on **`0.10.5`, which is not deployed** —
+**Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the repo
+is on **`0.10.6`**. **The deployed version is not known to this file** — it was
+`0.10.0` for a long time, the author deployed again during the §14/§16 session,
+and nobody curled it afterwards. `curl /api/version` (§7), and do not trust the
+next sentence over it —
 §11 (the usability pass), §12 (two things the author found while testing it),
 §13 (the top bar, made one bar), §14 (the student handbook, which is the
-placeholder §13 left) and §15 (the packaging test §14d asked for, and the
-language toggle), and together they are the only undeployed code.
+placeholder §13 left), §15 (the packaging test §14d asked for, and the language
+toggle) and §16 (the password reveal, which had been misplaced since 0.10.2).
+**§14's contents are deployed** — the author pulled and rebuilt after §14d's
+fix; §16 was reported off that running server. What is undeployed is whatever
+followed it, so believe `curl /api/version` (§7) rather than this line.
 
 **§14 got its own number rather than folding into §13's**, because §13 was
 already committed when it landed and `curl /api/version` is how a deploy is
@@ -5436,3 +5442,71 @@ in dark mode.
 
 **Not verified:** the toggle on a phone, and with a screen reader. §13b's "still
 not verified: mobile" stands and now covers one more control.
+
+---
+
+## 16. The reveal sat below its field — 0.10.6 (2026-08-09)
+
+Reported off the **deployed** app: the eye on `/login` is not in the password
+field, it is at its bottom-right corner, half outside. It had been that way
+since 0.10.2 shipped it.
+
+### 16a. What it was
+
+```css
+body[data-page='auth'] form button { margin-top: 1.1rem; height: 44px; }
+```
+
+That is the submit button's rule. `.pw-reveal` is a `<button>` inside the same
+`<form>`, so **it matched too**. The reveal is `position: absolute` with `top:
+2px; bottom: 2px` inside a 38 px field, so it should be 34 px tall. It got
+`height: 44px` — which over-constrains `top` + `bottom` + `height`, so CSS drops
+`bottom` — and then `margin-top: 1.1rem` moved it down another 17.6 px.
+Measured: 44 px tall, 19.6 px below the top of a 38 px field, its centre 22.6 px
+low.
+
+**The comment at the site said this could not happen.** It claimed the reveal
+was exempt "because it is positioned out of the flow". `position: absolute`
+changes how `margin-top` resolves; it does not stop a descendant selector from
+matching. The comment was written confidently and was wrong, and it is the
+reason nobody looked here — that is the part worth remembering, not the pixels.
+
+**The lesson is not "check specificity".** `.pw-reveal` *won* on specificity —
+two classes against one — and the bug happened anyway, because it declares no
+`height` and so had nothing to win with. A rule that sets *some* properties does
+not shield an element from a broader rule that sets the others.
+
+### 16b. The fix, and where it moved the fragility
+
+`form > button`. The child combinator, so the rule reaches the submit button and
+nothing nested. Both auth forms already keep their submit as a direct child.
+
+That moves the fragility rather than removing it: wrap a submit button in a
+`<div>` and it silently loses its height and its spacing. So
+`test/pages.test.mjs` now asserts the submit buttons on `login.html` and
+`password.html` are direct children of their `<form>`, and says why. Proved by
+wrapping one — it fails with `submit button is nested inside <div>`.
+
+The alternative was `height: auto; margin-top: 0` on `.pw-reveal`, and it was
+rejected: resetting each property the broader rule happens to set is a list
+nobody will maintain, and the next property added up there would reopen this.
+
+**No test covers the layout itself** — that needs a browser and this suite has
+none. Verified by measurement instead: 34 px tall, 2 px inset, centre offset
+**0.0 px**, submit button still 44 px.
+
+### 16c. There is no tour
+
+Asked in the same message: why the tour does not replay for test accounts, and
+whether it is once per IP.
+
+**Datebänkli has no tour, guided walkthrough or onboarding of any kind**, and
+never has. Nothing in `app/src`, `app/test`, the migrations, `db/`, the docs or
+any commit in the history mentions one, under that name or under `Rundgang`,
+`Einführung`, `onboarding`, `walkthrough` or `welcome`. So there is no
+per-account or per-IP rule to describe: the behaviour being asked about does not
+exist to have a rule.
+
+What a new account *does* get is the forced password change (staff only) and, on
+the demo, the lease banner. If a tour is wanted it is a feature to design, and
+the first question is what it costs the twenty-fifth student to dismiss it.

@@ -957,7 +957,13 @@ body[data-page='auth'] form {
 body[data-page='auth'] form label {
   margin-top: 0.6rem;
 }
-body[data-page='auth'] form button {
+/* The submit button. **`> button`, and the child combinator is load-bearing** —
+   as a plain descendant selector this also caught the password reveal nested
+   inside `.pw-field`, which is what put the eye 18 px below where it belonged
+   on the deployed 0.10.2 (§16). Both auth forms keep their submit as a direct
+   child; a button that needs a wrapper needs its own rule rather than this one
+   widened back. */
+body[data-page='auth'] form > button {
   margin-top: 1.1rem;
   height: 44px;
 }
@@ -973,10 +979,20 @@ body[data-page='auth'] form button {
    that reads as a second field. It is an affordance on the field, not a control
    beside it.
 
-   Note the `form button` rule above sets a 44px height and a top margin for the
-   submit button — this one is positioned out of the flow, so neither reaches
-   it. That is luck rather than design; if that rule ever grows a selector this
-   one has to be excluded from it. */
+   **The rule above used to say `form button` and this comment used to claim
+   that being out of the flow exempted this button from it. Both were wrong,
+   and it shipped.** `position: absolute` changes how `margin-top` is resolved;
+   it does not stop a descendant selector from matching. So the reveal got
+   `height: 44px` against a 38 px field — which over-constrains `top` + `bottom`
+   + `height`, so CSS drops `bottom` — and then `margin-top: 1.1rem` pushed it
+   down another 17.6 px. The eye sat below the field, half outside it.
+
+   The lesson is not "check specificity". `.pw-reveal` *won* on specificity and
+   the bug happened anyway, because it declares no `height` and so had nothing
+   to win with. **A rule that only sets some properties does not shield an
+   element from a broader rule that sets the others.** That is why the fix is a
+   narrower selector up there rather than `height: auto` down here: resetting
+   each property this one happens to inherit is a list nobody will maintain. */
 body[data-page='auth'] .pw-field {
   position: relative;
   display: flex;
