@@ -59,6 +59,7 @@ import {
   json,
   mountDemoBanner,
   mountVersion,
+  wireLogout,
   wireThemeToggle,
 } from '/assets/util.js';
 
@@ -779,6 +780,7 @@ $('sql').onclick = () => (location.href = '/sql');
 $('lesson').onclick = () => (location.href = '/lesson');
 $('roster').onclick = () => (location.href = '/roster');
 $('overview').onclick = () => (location.href = '/');
+wireLogout($('logout'));
 $('handinClose').onclick = () => $('handinDialog').close();
 
 /**

@@ -367,6 +367,11 @@ export default {
   'nav.lesson': 'Lektion',
   'nav.roster': 'Klassen',
   'nav.exercises': 'Übungen',
+  // On every page with a top bar since 0.10.2, as an icon at the right-hand
+  // end. It carries no visible text, so this is the whole of what a screen
+  // reader gets — and the tooltip a mouse user gets, which is why the two are
+  // set from one key.
+  'nav.logout': 'Abmelden',
   // The theme toggle's label names the state it switches *to*, matching the icon
   // (Chalk §6). The control has no text of its own, so this label is the only
   // thing a screen reader gets — and `util.js` re-sets it on every flip.
@@ -384,7 +389,6 @@ export default {
   'home.col_code': 'Code',
   'home.nothing': 'Noch nichts zu sehen.',
   'home.password': 'Passwort ändern',
-  'home.logout': 'Abmelden',
 
   // --- the roster page ------------------------------------------------------
 

@@ -76,7 +76,24 @@
                spellcheck="false" required autofocus />
 
         <label for="password">Passwort <span class="en" lang="en">/ Password</span></label>
-        <input id="password" name="password" type="password" required />
+        <!--
+          The reveal. A password typed off a printed slip is the case this page
+          exists for, and it is the one case where hiding the characters helps
+          nobody: the reader is copying a string they cannot remember, in a room
+          where the risk is a typo rather than a shoulder.
+
+          `type="button"`, or it submits the form — the default inside a `<form>`
+          is `submit`, and the failure is a login attempt fired by the eye.
+          `login.js` owns the label and the icon together, the way
+          `wireThemeToggle` owns the theme button's: both name the state the
+          click would move *to*, and a `data-i18n-attr` here would fight it.
+        -->
+        <div class="pw-field">
+          <input id="password" name="password" type="password" required />
+          <button type="button" id="reveal" class="pw-reveal mi" aria-pressed="false"
+                  aria-label="Passwort anzeigen / Show password"
+                  title="Passwort anzeigen / Show password">visibility</button>
+        </div>
 
         <button type="submit" class="primary">Anmelden / Sign in</button>
       </form>

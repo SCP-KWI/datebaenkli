@@ -68,6 +68,33 @@ test('pages: every page carries the Chalk head and a theme script', () => {
   }
 });
 
+/**
+ * The logout is on every page a signed-in user can reach, and it is the last
+ * control in the bar. Both halves are assertions rather than habits: the button
+ * was on the overview alone until 0.10.2 and nobody noticed for four phases,
+ * and "always at the right-hand end" is the sort of promise a seventh page
+ * breaks by accident.
+ *
+ * `password.html` is in the list and has no top bar — it is the page the
+ * forced-change gate can *hold* someone on, so it is the one that most needs a
+ * way off. Its button is corner-fixed instead; this only checks it exists.
+ */
+test('pages: every signed-in page carries a logout, last in its top bar', () => {
+  const stripComments = (html) => html.replace(/<!--[\s\S]*?-->/g, '');
+
+  for (const page of ['home.html', 'sql.html', 'uebungen.html', 'lesson.html', 'roster.html']) {
+    const html = read(page);
+    const open = html.indexOf('<nav class="topbar-actions">');
+    assert.notEqual(open, -1, `${page}: no top bar`);
+    const bar = stripComments(html.slice(open, html.indexOf('</nav>', open)));
+    const ids = [...bar.matchAll(/\bid="([A-Za-z-]+)"/g)].map((m) => m[1]);
+    assert.ok(ids.includes('logout'), `${page}: no logout in the top bar`);
+    assert.equal(ids.at(-1), 'logout', `${page}: logout is not the last control`);
+  }
+
+  assert.ok(read('password.html').includes('id="logout"'), 'password.html: no logout');
+});
+
 test('pages: no inline event handlers or inline scripts survive', () => {
   // `script-src 'self'` and `style-src 'self'` in server.ts are only worth
   // having while this is true. Both were paid for once (phase 8.2); a new page

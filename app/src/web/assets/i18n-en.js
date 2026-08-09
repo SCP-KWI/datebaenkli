@@ -333,6 +333,7 @@ export default {
   'nav.lesson': 'Lesson',
   'nav.roster': 'Classes',
   'nav.exercises': 'Exercises',
+  'nav.logout': 'Log out',
   'nav.theme_dark': 'Switch to dark theme',
   'nav.theme_light': 'Switch to light theme',
 
@@ -345,7 +346,6 @@ export default {
   'home.col_code': 'Code',
   'home.nothing': 'Nothing to see yet.',
   'home.password': 'Change password',
-  'home.logout': 'Log out',
 
   // --- the roster page ------------------------------------------------------
 

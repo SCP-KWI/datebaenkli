@@ -14,7 +14,7 @@
  */
 
 import { apply, formats, load, paintCached, t, wireLanguageSelect } from './i18n.js';
-import { esc, mb, mountDemoBanner, mountVersion, wireThemeToggle } from './util.js';
+import { esc, mb, mountDemoBanner, mountVersion, wireLogout, wireThemeToggle } from './util.js';
 
 const REFRESH_MS = 5000;
 
@@ -272,6 +272,7 @@ wireLanguageSelect($('lang'));
 // every real account, so the call is unconditional (HANDOFF §9g).
 mountDemoBanner(me.demo, t);
 mountVersion($('version'), (d) => formats().dateTime(d));
+wireLogout($('logout'));
 
 /**
  * Null and `{ classes: [] }` are different answers and must not render the same

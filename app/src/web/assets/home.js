@@ -9,7 +9,7 @@
  */
 
 import { apply, formats, load, paintCached, t, wireLanguageSelect } from '/assets/i18n.js';
-import { esc, mountDemoBanner, mountVersion, wireThemeToggle } from '/assets/util.js';
+import { esc, mountDemoBanner, mountVersion, wireLogout, wireThemeToggle } from '/assets/util.js';
 
 const get = async (url) => {
   const response = await fetch(url);
@@ -147,12 +147,7 @@ byId('lesson').onclick = () => (location.href = '/lesson');
 byId('roster').onclick = () => (location.href = '/roster');
 byId('exercises').onclick = () => (location.href = '/uebungen');
 byId('change').onclick = () => (location.href = '/password');
-byId('logout').onclick = async () => {
-  // The content-type is not optional: it is the CSRF control, so a POST
-  // without it is a 415 and the session would survive the "logout".
-  await fetch('/api/logout', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-  });
-  location.href = '/login';
-};
+// Was this file's own five lines until the button went on every page; the
+// content-type argument that used to be here is now in `wireLogout`, where the
+// other four callers can read it too.
+wireLogout(byId('logout'));

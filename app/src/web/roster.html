@@ -59,6 +59,15 @@
           <a class="btn icon-btn help-link" href="/handbuch" target="_blank" rel="noopener"
              aria-label="Handbuch öffnen (neues Fenster)"
              title="Handbuch öffnen (neues Fenster)">?</a>
+          <!-- Always the last control in the bar, on every page that has one. It used
+               to be on the overview alone, which meant "sign out" was two clicks and a
+               page load away from wherever anyone actually was — worst on `/sql`, the
+               one page a class sits on for a whole lesson, and on a machine the next
+               class uses. Icon rather than the word, because a bar this full cannot
+               take another label and this is the one glyph nobody has to learn. -->
+          <button id="logout" type="button" class="icon-btn mi" aria-label="Abmelden"
+                  title="Abmelden" data-i18n-attr="aria-label:nav.logout title:nav.logout"
+                  >logout</button>
         </nav>
       </header>
 

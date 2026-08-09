@@ -69,7 +69,7 @@ const ICONS = [
   'database', 'delete', 'download', 'error', 'expand_more', 'groups', 'info',
   'key', 'language', 'light_mode', 'logout', 'play_arrow', 'print', 'refresh',
   'restart_alt', 'schedule', 'school', 'stop_circle', 'table_view',
-  'upload_file', 'warning',
+  'upload_file', 'visibility', 'visibility_off', 'warning',
 ];
 
 function assertSorted(names) {

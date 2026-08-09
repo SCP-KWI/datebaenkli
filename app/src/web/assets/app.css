@@ -891,6 +891,49 @@ body[data-page='auth'] form button {
   margin-top: 1.1rem;
   height: 44px;
 }
+/* The password field and its reveal, as one control.
+
+   The button is *inside* the field's box rather than beside it, which is what
+   every browser's own reveal does and therefore what a reader expects. The
+   input's right padding is what keeps the text from running under it — without
+   that, a long password is hidden by the control meant to show it.
+
+   `border: none` and a transparent background: the button rules at the top of
+   this file give every `<button>` a border and a surface, and inside an input
+   that reads as a second field. It is an affordance on the field, not a control
+   beside it.
+
+   Note the `form button` rule above sets a 44px height and a top margin for the
+   submit button — this one is positioned out of the flow, so neither reaches
+   it. That is luck rather than design; if that rule ever grows a selector this
+   one has to be excluded from it. */
+body[data-page='auth'] .pw-field {
+  position: relative;
+  display: flex;
+}
+body[data-page='auth'] .pw-field input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 2.6rem;
+}
+body[data-page='auth'] .pw-reveal {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  bottom: 2px;
+  width: 2.4rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+}
+body[data-page='auth'] .pw-reveal:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
 /* The bilingual second line on the login form — smaller and quieter than the
    German, because it is the same string twice and not new information. */
 body[data-page='auth'] .en,
@@ -910,12 +953,18 @@ body[data-page='auth'] .brand-stack {
    the field she is meant to be looking at. Scoped to `auth` on purpose — every
    other page that gets the button has a top bar, and the day `password.html`
    grows one this rule is already right for it. */
-body[data-page='auth'] .help-fab {
+body[data-page='auth'] .help-fab,
+body[data-page='auth'] .logout-fab {
   position: fixed;
   top: 0.9rem;
   right: 0.9rem;
   z-index: 20;
 }
+/* The two never appear together — the handbook button is on `/login`, the
+   logout on `/password`, and each page has exactly one of them — so they share
+   the corner rather than needing to be laid out against each other. If a page
+   ever carries both, this is the rule that has to grow, and it will do so
+   silently by stacking them: check here first. */
 
 /* --- home ------------------------------------------------------------------ */
 body[data-page='home'] h2 {

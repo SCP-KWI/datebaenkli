@@ -46,6 +46,7 @@ import {
   json,
   mountDemoBanner,
   mountVersion,
+  wireLogout,
   wireThemeToggle,
 } from './util.js';
 
@@ -785,6 +786,7 @@ if (!me) {
   // every real account, so the call is unconditional (HANDOFF §9g).
   mountDemoBanner(me.demo, t);
   mountVersion($('version'), (d) => formats().dateTime(d));
+  wireLogout($('logout'));
 
   $('sub').textContent = `${me.user.displayName} · ${
     me.user.role === 'admin' ? t('common.role_admin') : t('common.role_teacher')

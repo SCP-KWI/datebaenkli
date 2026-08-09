@@ -179,6 +179,31 @@ export async function mountVersion(element, formatDate) {
 }
 
 /**
+ * Sign out. One implementation, because the wrong copy of it is silent.
+ *
+ * It lived in `home.js` while the button was on one page. Now it is on every
+ * page with a top bar, and this is exactly the `json()` case one line up: the
+ * content type **is** the CSRF control, so a POST without it is a 415 and the
+ * session survives a "logout" that looked like it worked. A shared classroom
+ * machine is where that gets noticed, by the wrong person.
+ *
+ * `replace`, not `href`: the page behind a logout must not be one Back returns
+ * to, where it would look alive and answer 401 to everything (`mountDemoBanner`
+ * makes the same call for the same reason).
+ *
+ * The button is not disabled first. If the request fails there is nothing to
+ * retry *into* — the caller wants out — and the redirect happens either way, so
+ * the worst case is a session that ends at its own expiry instead of now.
+ */
+export function wireLogout(button) {
+  if (!button) return;
+  button.addEventListener('click', async () => {
+    await fetch('/api/logout', json({})).catch(() => {});
+    location.replace('/login');
+  });
+}
+
+/**
  * The app's confirmation dialog, in place of `window.confirm`.
  *
  * Every other question this app asks is a `<dialog>` — the CSV import, the SQL

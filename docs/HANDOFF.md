@@ -3,8 +3,9 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the
-server serves `0.10.0` and the repo is on **`0.10.1`, which is not deployed** —
-it is §11, the usability pass, and it is the only undeployed code.
+server serves `0.10.0` and the repo is on **`0.10.2`, which is not deployed** —
+that is §11 (the usability pass) plus §12 (two things the author found while
+testing it), and together they are the only undeployed code.
 
 **The demo is ON in production, and §9 still says it shipped dark.** Curled
 today: `/api/demo` answers `{"enabled":true,"leaseMinutes":30}` and `builtAt` is
@@ -4361,8 +4362,8 @@ The driver's real message is in the app log — `grep 'could not get a connectio
 
 ## 8. Next session should
 
-**Deploy `0.10.1` — the usability pass, §11.** It is the only undeployed code
-and it is entirely front-end. §7's runbook applies unchanged, and the one thing
+**Deploy `0.10.2` — the usability pass (§11) and the two follow-ups (§12).**
+It is the only undeployed code and it is entirely front-end. §7's runbook applies unchanged, and the one thing
 to actually check afterwards is that a destructive button still destroys: §11b
 is a bug that made every one of them dead and was invisible to the whole unit
 suite. Run the live suites and both verify scripts as part of it — §11d says why
@@ -5053,3 +5054,79 @@ save bar are both untested on a phone.
   leave would be friction for nothing.
 - **The demo pool's session is 30 minutes and the countdown is a bar, not a
   modal.** Untouched; §9g has the argument.
+
+---
+
+## 12. Two follow-ups from the author — 0.10.2 (2026-08-09, NOT DEPLOYED)
+
+Both found while looking at §11 in a browser, and both are the same kind of
+thing: a control that was missing rather than wrong.
+
+### 12a. A reveal on the login password field
+
+A password typed off a printed slip is the case `/login` exists for, and it is
+the one case where masking the characters helps nobody — the reader is copying a
+string they cannot remember, and the risk in the room is a typo, not a shoulder.
+`login.html` gains an eye inside the field; `login.js` owns the icon and the
+label together, both naming the state the click moves *to*, which is
+`wireThemeToggle`'s rule and the same trap if they are set apart.
+
+Three things that would have been bugs written the obvious way:
+
+- **`type="button"`.** The default for a `<button>` inside a `<form>` is
+  `submit`, so the eye would have fired a login attempt.
+- **`form.querySelector('button')` now finds the eye, not the submit.** It is
+  the first button in the form. That line disabled the submit during a request;
+  it is `button[type="submit"]` now, in `login.js` *and* in `password.js`, which
+  has the same shape and would grow the same bug the day it gets a reveal.
+- **The glyph had to be vendored.** `visibility` and `visibility_off` were not in
+  the subset — `ICONS` in `app/tools/vendor-fonts.mjs`, alphabetically, then
+  `node tools/vendor-fonts.mjs`, which needs the network and whose output is
+  committed. Only `material-symbols-rounded-400.woff2` changed (5 KB).
+
+Nothing is persisted. "Show my password by default" is not a preference this app
+should remember on a machine a class shares.
+
+### 12b. Logout, on every page, last in the bar
+
+It was on `/` alone. That made signing out two clicks and a page load away from
+wherever anyone actually was — worst on `/sql`, the page a class sits on for a
+whole lesson, on a machine the next class uses. It is now the last control in
+the top bar on all five pages that have one, as the `logout` glyph (already in
+the subset), and corner-fixed on `password.html` — **the page the forced-change
+gate can hold someone on**, where until now the only ways off were finishing the
+form or clearing a cookie by hand.
+
+`wireLogout` in `util.js` is the single implementation, and it is there for the
+reason `json()` is: the content type **is** the CSRF control, so a copy that
+forgets it is a 415 and the session survives a "logout" that looked like it
+worked. It uses `location.replace`, so the page behind it is not one the Back
+button returns to.
+
+**The label is a `data-i18n-attr`, never a `data-i18n`.** `apply()` sets
+`textContent`, and this button's text content is the ligature name — `data-i18n`
+would replace `logout` with "Abmelden" and render the word instead of the icon,
+in whichever locale was swept second. Verified in both.
+
+`test/pages.test.mjs` gained the assertion: every signed-in page carries a
+logout and it is the **last** id in its top bar. `home.logout` is gone from both
+catalogues, replaced by `nav.logout`.
+
+### 12c. What is not verified
+
+**The top bar's width on `/sql` for a teacher.** That bar now holds four nav
+buttons, a divider, two page actions, the language select, the theme toggle and
+the logout — and the browser pane used for testing never composited a real
+viewport (`window.innerWidth` reported 0 throughout), so every measurement of it
+was meaningless and none is quoted here. `.topbar-actions` is `flex-wrap: wrap`,
+so the failure mode is a second row rather than an overflow, and `.who`
+ellipsises before anything else gives. **Look at it on a real screen before
+deploying**, and if it is cramped the cheap fix is `sql.import` and `sql.reset`
+becoming icon buttons — `upload_file` and `restart_alt` are both already in the
+subset. Do not do that to the reset button without keeping a visible label:
+§11's report is explicit that it is one misclick from a harmless control.
+
+Everything else was driven in the browser: the reveal both ways including the
+focus returning to the field, that it renders as a ligature rather than the
+literal word, that it fires no login request, the logout label translating while
+the glyph does not, and a real logout leaving `/api/me` answering 401.

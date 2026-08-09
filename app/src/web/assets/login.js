@@ -21,7 +21,38 @@ mountVersion(document.getElementById('version'), (d) =>
 
 const form = document.getElementById('form');
 const error = document.getElementById('error');
-const button = form.querySelector('button');
+const button = form.querySelector('button[type="submit"]');
+
+/**
+ * Show the password in clear text.
+ *
+ * The icon and the label name the state the click moves *to*, which is
+ * `wireThemeToggle`'s rule in `util.js` and the same trap: the two are one
+ * control and describing them separately is how they end up disagreeing in
+ * whichever state the author was not looking at.
+ *
+ * The focus is put back in the field afterwards. Without it the caret is lost
+ * to the button, and this is pressed mid-typing by someone checking a slip —
+ * having to click back into the field is the whole cost of the feature.
+ *
+ * Not persisted anywhere. "Show my password by default" is not a preference
+ * this app should remember on a machine a class shares.
+ */
+const password = document.getElementById('password');
+const reveal = document.getElementById('reveal');
+
+reveal.addEventListener('click', () => {
+  const shown = password.type === 'text';
+  password.type = shown ? 'password' : 'text';
+  reveal.textContent = shown ? 'visibility' : 'visibility_off';
+  reveal.setAttribute('aria-pressed', String(!shown));
+  const label = shown
+    ? 'Passwort anzeigen / Show password'
+    : 'Passwort verbergen / Hide password';
+  reveal.setAttribute('aria-label', label);
+  reveal.setAttribute('title', label);
+  password.focus();
+});
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();

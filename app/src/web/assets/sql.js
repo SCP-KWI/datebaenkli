@@ -28,6 +28,7 @@ import {
   mountDemoBanner,
   mountVersion,
   ticked,
+  wireLogout,
   wireThemeToggle,
 } from '/assets/util.js';
 
@@ -707,6 +708,7 @@ $('overview').onclick = () => (location.href = '/');
 $('exercises').onclick = () => (location.href = '/uebungen');
 $('lesson').onclick = () => (location.href = '/lesson');
 $('roster').onclick = () => (location.href = '/roster');
+wireLogout($('logout'));
 $('run').onclick = () => void run();
 $('cancel').onclick = () => void cancel();
 $('reset').onclick = () => void reset();

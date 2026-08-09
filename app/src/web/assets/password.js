@@ -6,12 +6,17 @@
  */
 
 import { apply, errorText, formats, load, paintCached, t } from '/assets/i18n.js';
-import { mountVersion } from '/assets/util.js';
+import { mountVersion, wireLogout } from '/assets/util.js';
 
 const form = document.getElementById('form');
 const error = document.getElementById('error');
 const why = document.getElementById('why');
-const button = form.querySelector('button');
+const button = form.querySelector('button[type="submit"]');
+
+// Outside the branch below, and wired before `/api/me` is awaited: this is the
+// page a user can be *held* on by the forced-change gate, so the way off it has
+// to work even when everything else on the page is still loading.
+wireLogout(document.getElementById('logout'));
 
 // Started before the paint, awaited after — see `paintCached()`.
 const mePromise = fetch('/api/me').then((r) => (r.ok ? r.json() : null));
