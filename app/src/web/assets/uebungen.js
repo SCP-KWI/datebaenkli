@@ -51,7 +51,7 @@
  */
 
 import { openImportDialog, post } from '/assets/csv-import.js';
-import { apply, errorText, formats, load, paintCached, t, wireLanguageSelect } from '/assets/i18n.js';
+import { apply, errorText, formats, load, paintCached, t, wireLanguageToggle } from '/assets/i18n.js';
 import { renderMarkdown } from '/assets/markdown.js';
 import {
   confirmDialog,
@@ -764,7 +764,7 @@ if (!me) location.href = '/login';
 await load(me.user.locale);
 apply();
 paintTheme();
-wireLanguageSelect($('lang'));
+wireLanguageToggle($('lang'));
 // The demo countdown, if this session is a demo lease. `me.demo` is null for
 // every real account, so the call is unconditional (HANDOFF §9g).
 mountDemoBanner(me.demo, t);

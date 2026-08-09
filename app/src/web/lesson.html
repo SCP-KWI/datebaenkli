@@ -47,10 +47,25 @@
              A page's own actions belong to the page: `/sql` used to keep two of them
              in this strip, and that alone made its bar look unlike every other. -->
         <span class="topbar-sep" aria-hidden="true"></span>
-        <select id="lang" class="lang-select" aria-label="Sprache / Language">
-          <option value="de">Deutsch</option>
-          <option value="en">English</option>
-        </select>
+        <!-- The language control. A segmented toggle rather than a `<select>` since
+             0.10.5, matching the sister app Tscheggsch: with two options, a select
+             hides half of them behind a click, and "English exists" is the one
+             thing this control has to advertise.
+
+             `role="group"` with two `aria-pressed` buttons, not a `radiogroup`:
+             radio roles owe the reader arrow-key navigation, and a group of
+             toggle buttons owes them nothing beyond Tab and Enter, which they
+             already have. The label stays bilingual — it names the control's own
+             subject, so translating it would hide it from the reader looking.
+
+             `aria-pressed` is set by `apply()` in `i18n.js` and by nothing else,
+             including this markup's own attribute, which is the pre-script
+             fallback. Two owners for one state attribute is the trap recorded at
+             the top of app.css. -->
+        <div id="lang" class="lang-toggle" role="group" aria-label="Sprache / Language">
+          <button type="button" data-lang="de" aria-pressed="true" lang="de">DE</button>
+          <button type="button" data-lang="en" aria-pressed="false" lang="en">EN</button>
+        </div>
         <!-- No `data-i18n-attr`: `wireThemeToggle` owns this label, because it is the
              only thing that knows which way the toggle currently points. The German
              is the no-script fallback. -->

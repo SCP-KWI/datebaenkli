@@ -13,7 +13,7 @@
  * times before morning.
  */
 
-import { apply, formats, load, paintCached, t, wireLanguageSelect } from './i18n.js';
+import { apply, formats, load, paintCached, t, wireLanguageToggle } from './i18n.js';
 import {
   esc,
   mb,
@@ -272,7 +272,7 @@ apply();
 // After apply(), not before: the toggle's label depends on which way it
 // currently points, which no `data-i18n` key can express.
 paintTheme();
-wireLanguageSelect($('lang'));
+wireLanguageToggle($('lang'));
 // The demo countdown, if this session is a demo lease. `me.demo` is null for
 // every real account, so the call is unconditional (HANDOFF §9g).
 mountDemoBanner(me.demo, t);

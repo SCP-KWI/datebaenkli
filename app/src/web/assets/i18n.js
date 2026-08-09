@@ -224,6 +224,19 @@ export function apply(root = document) {
     }
   }
   document.documentElement.lang = currentLocale;
+
+  // The language toggle's pressed state, set here rather than in
+  // `wireLanguageToggle` below, because `apply()` is what runs on the *first*
+  // frame (`paintCached`) and the wiring does not. Setting it there instead
+  // left the toggle showing DE for the length of a `/api/me` round trip on an
+  // English account — invisible with the old `<select>`, obvious once the
+  // active option is a filled pill.
+  //
+  // One owner for the attribute, which is why the markup's own `aria-pressed`
+  // is a pre-script fallback and nothing writes it but this loop.
+  for (const button of root.querySelectorAll('.lang-toggle [data-lang]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.lang === currentLocale));
+  }
 }
 
 /**
@@ -319,7 +332,7 @@ export function errorText(error) {
 }
 
 /**
- * Point the language `<select>` at the account and make it switch on change.
+ * Make the language toggle switch the account's locale.
  *
  * A full reload rather than a re-render: the pages build most of their content
  * from script, and a locale swap would have to re-run every render function on
@@ -328,20 +341,30 @@ export function errorText(error) {
  * reloaded page reads the new value back from the server rather than trusting
  * anything held on the client.
  *
- * If the PATCH fails the select is put back — silently switching the label while
- * the account still says `de` would make the next page load look like it lost
- * the setting.
+ * **The pressed state is not touched here**, in either direction. `apply()`
+ * owns it, and on the failure path that is what makes this correct for free:
+ * nothing moved, so there is nothing to put back. The `<select>` version had to
+ * restore `select.value` by hand, because the browser had already changed it —
+ * silently showing English while the account still said `de` would make the
+ * next page load look like it lost the setting.
+ *
+ * One listener on the group rather than one per button. Two buttons do not make
+ * that a performance argument; it is that a third language would then be markup
+ * only, which is the right amount of work for adding one.
  */
-export function wireLanguageSelect(select) {
-  if (!select) return;
-  select.value = currentLocale;
-  select.addEventListener('change', async () => {
-    const wanted = select.value;
+export function wireLanguageToggle(group) {
+  if (!group) return;
+  group.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-lang]');
+    // The gap between the pills is inside the group and hits nothing. Clicking
+    // the active one is also a no-op: a PATCH to the value it already holds
+    // would succeed and cost a reload for no change.
+    if (!button || button.dataset.lang === currentLocale) return;
+
+    const wanted = button.dataset.lang;
     const response = await fetch('/api/me', json({ locale: wanted }, 'PATCH')).catch(() => null);
-    if (!response?.ok) {
-      select.value = currentLocale;
-      return;
-    }
+    if (!response?.ok) return;
+
     // Before the reload, not after: the reloaded page paints its first frame
     // from this key, so writing it only on the way back up would mean every
     // language switch flashes the language you just left.

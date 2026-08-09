@@ -3,10 +3,11 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the
-server serves `0.10.0` and the repo is on **`0.10.4`, which is not deployed** —
+server serves `0.10.0` and the repo is on **`0.10.5`, which is not deployed** —
 §11 (the usability pass), §12 (two things the author found while testing it),
-§13 (the top bar, made one bar) and §14 (the student handbook, which is the
-placeholder §13 left), and together they are the only undeployed code.
+§13 (the top bar, made one bar), §14 (the student handbook, which is the
+placeholder §13 left) and §15 (the packaging test §14d asked for, and the
+language toggle), and together they are the only undeployed code.
 
 **§14 got its own number rather than folding into §13's**, because §13 was
 already committed when it landed and `curl /api/version` is how a deploy is
@@ -5354,3 +5355,84 @@ copies out of `docs/` is named in both `.dockerignore` and `app/Dockerfile`. It
 clears CLAUDE.md's bar for a new test file — it was wrong with nobody seeing it,
 and pure file reads can reach it. Four comments are the weaker version of that
 and are what is there now.
+
+---
+
+## 15. The packaging test, and the language toggle — 0.10.5 (2026-08-09)
+
+Two unrelated things, both small.
+
+### 15a. `test/packaging.test.mjs` — the four files that must agree
+
+§14d listed it as "worth doing and not done". It is done: four assertions, pure
+file reads, no db and no Docker. **Every list is read out of the file that owns
+it** — `postbuild`'s `cp`, the `COPY` lines in `app/Dockerfile`, the `!docs/…`
+allow-lines in `.dockerignore`, and `DOCUMENTS` in `build.mjs`. Writing the
+document names into the test would have made it a fifth copy, and the one that
+goes stale silently, because a test that agrees with itself always passes.
+
+**Proved by breaking it three ways**, each reverted afterwards: delete the
+`.dockerignore` allow-line → the third case fails alone; narrow the Dockerfile
+`COPY` back to one file → the second fails alone; narrow `postbuild` back to one
+file → the fourth fails alone (generated, never shipped). That is the whole
+0.10.4 outage, caught in 60 ms.
+
+The first assertion — that every copied doc exists — is the one `npm run build`
+would also catch, and it is there to keep the other three readable: without it a
+typo in `postbuild` reports as "the Dockerfile does not copy docs/hanbuch.html".
+
+### 15b. The language control is a segmented toggle
+
+The author's request, matching the sister app Tscheggsch. It was a `<select>`
+from phase 6b.
+
+**Why it is more than taste:** with two options a select hides half of them
+behind a click, and "English exists" is the one thing this control has to
+advertise. Both labels are now visible for *less* width — measured in the same
+browser by swapping the old control back into the live DOM, the toggle is
+**85 px against the select's 91 px**, and at a 1150 px viewport the bar wrapped
+to two rows with the toggle where the select gave three.
+
+That last number does not match §13b, which measured one row at 1150. Neither is
+wrong: §13b used headless Chromium with `--screenshot` because the in-app
+browser pane would not composite, and this was measured in that pane. **The
+comparison that matters is the like-for-like swap**, both controls in one
+renderer one line apart, and it moves in the good direction. If the absolute
+thresholds ever matter again, re-measure both the same way; do not mix the two
+setups, which is what made this look like a regression for ten minutes.
+
+Three decisions worth keeping:
+
+- **The active segment is the solid accent**, not Chalk §7's tab treatment
+  (`--surface` + shadow). A tab strip marks where you *are* among peers; this
+  marks a *setting*, next to a theme toggle and a `?`. The solid reads as "on"
+  from the back of a classroom.
+- **`role="group"` with two `aria-pressed` buttons, not a `radiogroup`.** Radio
+  roles owe the reader arrow-key navigation; a group of toggle buttons owes them
+  nothing beyond Tab and Enter, which they already have. `button:focus-visible`
+  in `app.css` already rings them.
+- **`apply()` in `i18n.js` owns `aria-pressed`, and nothing else writes it** —
+  including `wireLanguageToggle`, which now only attaches the click handler.
+  `apply()` is what runs on the *first* frame via `paintCached()`, so an English
+  account no longer shows DE for the length of an `/api/me` round trip. That was
+  invisible with a select and obvious once the active option is a filled pill.
+  It also makes the failure path free: nothing moved, so there is nothing to put
+  back, where the select version had to restore `select.value` by hand.
+
+`DE`/`EN` carry no `data-i18n`: a language's own name is the one string that must
+not move when the UI language does. The group's `aria-label` stays bilingual for
+the reason it always was.
+
+Both handbooks said "das Auswahlfeld" in three places and now describe the
+toggle.
+
+### 15c. Verified
+
+431 unit tests (four new), typecheck clean, `verify-auth.sh` **96/96** against a
+real server — 96 rather than 95 because §14d added the second handbook route.
+The toggle driven in a browser as a teacher: DE→EN switches, persists across the
+reload, paints EN pressed on the first frame afterwards, and renders correctly
+in dark mode.
+
+**Not verified:** the toggle on a phone, and with a screen reader. §13b's "still
+not verified: mobile" stands and now covers one more control.

@@ -425,16 +425,65 @@ select {
   cursor: pointer;
 }
 
-/* The language control (phase 6b shipped it unstyled, waiting for this shell).
-   Compact, so it reads as chrome beside the theme toggle rather than as a form
-   field that happens to live in the nav. */
-.lang-select {
+/* The language control — a segmented toggle, matching the sister app
+   Tscheggsch (0.10.5). It was a `<select>` from phase 6b until then.
+
+   Why the change is more than taste: a two-option `<select>` hides half its
+   options behind a click, so the reader cannot see that English exists without
+   opening it — and the one thing this control must advertise is that the other
+   language is there. Both labels visible costs the same 76 px the select took.
+
+   The active segment is the **solid accent**, not Chalk §7's tab treatment
+   (`--surface` + shadow). That is deliberate: a tab strip marks where you *are*
+   among peers, and this marks a *setting*, sitting next to a theme toggle and a
+   `?`. The solid reads as "on" at a glance from the back of a classroom, which
+   the raised-card treatment does not.
+
+   `DE`/`EN` are not translated and carry no `data-i18n`: a language's own name
+   is the one string that must not move when the UI language does. */
+.lang-toggle {
+  display: inline-flex;
+  align-items: center;
   height: 36px;
-  padding: 0 0.4rem;
-  font-size: 13px;
-  border-width: 1px;
-  border-color: var(--line-strong);
-  background: var(--surface);
+  padding: 3px;
+  gap: 2px;
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.lang-toggle button {
+  height: 100%;
+  padding: 0 0.7rem;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.lang-toggle button:hover {
+  /* No border to recolour — the resting state has none, and giving one on hover
+     makes the strip jump by 2 px. Text only. */
+  border-color: transparent;
+  color: var(--ink);
+}
+
+.lang-toggle button[aria-pressed='true'] {
+  background: var(--accent);
+  /* White on the solid accent in both modes, the same rule `.btn-primary`
+     states: the accent solid does not shift between light and dark, so neither
+     may its text. */
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+
+.lang-toggle button[aria-pressed='true']:hover {
+  color: #fff;
 }
 
 /* ---------------------------------------------------------------------------
