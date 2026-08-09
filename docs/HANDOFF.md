@@ -3605,6 +3605,91 @@ runbook below, which is a heavier procedure than a code-only deploy needs.
 **Phase 7.2 is that shape** — no migration, one route field, four front-end
 files and two shell scripts that do not ship in the image at all.
 
+### The phase 10 migration — run on 2026-08-09, and it took production down
+
+**Read this before the next deploy.** The migration itself was uneventful. What
+was not is that the app entered a restart loop for ~20 minutes on a landmine
+armed two days earlier by something nobody thought of as a code change.
+
+**The outage: `Migration 001_init.sql has changed since it was applied.`**
+
+`migrate.ts` records a sha256 of every applied file and refuses to run if one
+differs. On 2026-08-07 the repo was **recreated from scratch to strip
+identifying data** (§3), and that scrub rewrote one comment line inside an
+already-applied migration:
+
+```
+-- cold : admin-triggered — dumped to /mnt/data, schema dropped, restorable
++-- cold : admin-triggered — dumped to /mnt/bulk, schema dropped, restorable
+```
+
+One comment. The checksum changed, the runner did exactly what it promises, and
+the app could not boot. **The scrub was not a deploy, so nothing caught it at the
+time; the bill arrived at the next deploy, which happened to be this one.**
+
+Three things worth taking from it:
+
+- **An applied migration is not a text file.** It is a hash the database holds.
+  A repo-wide search-and-replace reaches into `src/db/sql/**` like anything
+  else, and the failure surfaces as a total outage, at an unrelated moment,
+  with a message that points at 001 rather than at the change that caused it.
+- **The runner behaved correctly and its abort is what made this safe.** It
+  checks before applying and holds the advisory lock while it does, so nothing
+  ran, no partial state existed, and `004_demo.sql` had not touched the
+  database. Do not "fix" this by relaxing the check.
+- **The fix is to re-point the ledger, and only after proving the DDL is
+  identical.** The old file was still recoverable from the box's reflog
+  (`b373177`), which is what turned "the checksum differs" into "one comment
+  differs":
+
+  ```bash
+  git diff b373177:app/src/db/sql/meta/001_init.sql app/src/db/sql/meta/001_init.sql
+  docker exec datebaenkli-db psql -U postgres -d datebaenkli_meta -c \
+    "UPDATE _migrations SET checksum = '<new>' WHERE filename = '001_init.sql' AND checksum = '<old>'"
+  ```
+
+  **The `AND checksum =` is the load-bearing half**: it can only match the row
+  that was actually inspected, so a stale assumption fails as `UPDATE 0` rather
+  than silently rewriting a different entry. Expect `UPDATE 1`.
+
+Only 001 was affected; 002 and 003 matched byte for byte, and so did both teach
+migrations. **Check all of them anyway** — the runner stops at the first
+mismatch, so a clean 001 proves nothing about 003, and the teach database has
+its own ledger that is not reached until meta finishes.
+
+**Two more things the scrub moved, both found the same afternoon.** It replaced
+`/mnt/data` with `/mnt/bulk` in `db/backup.sh`'s and `docker-compose.yml`'s
+*defaults*. On this box both are set explicitly in `.env`, so nothing broke —
+but on a box relying on the defaults, the pull would have silently moved the
+nightly backups to a new directory and, worse, mounted an **empty** archive
+directory over the one holding every cold-stored student's dump. Check before
+restarting:
+
+```bash
+docker inspect datebaenkli-app --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
+```
+
+**Also: `git pull` failed three ways before it worked**, because the server's
+clone predates the recreated history and shares no ancestor with it. `pull`
+refused, `--ff-only` refused, `merge` refused ("unrelated histories"), and
+`git rebase` succeeded and produced the right tree — HEAD at `c8cbe9d`, clean,
+three commits. It worked here because the box had no local commits of its own.
+**On a box that does, rebase would replay them on top of the new history**, and
+the tree you build is then not the tree that was tested. Check
+`git log --oneline -8` and `git status --short` after any pull that reports
+`(forced update)`.
+
+The rest of the deploy followed §7's phase-9 shape and was uneventful: 330 tests
+in a throwaway container (`fail 0`, `skipped 0`), build, `up -d
+--force-recreate`, and after the ledger fix `applied migration 004_demo.sql`,
+`curl /api/version` moving on **both** fields to `0.10.0`.
+
+**Shipped dark on purpose.** `DBK_DEMO_ENABLED` was left unset, so the migration
+and the code went out while the feature stayed inert — `/api/demo` answers 404,
+no pool exists, no button appears. Enabling it is a separate act with its own
+verification (§9m), which is what kept this deploy's blast radius to "the app
+either boots or it does not".
+
 ### The phase 9 migration — run on 2026-08-07, and it was uneventful
 
 **Done.** Kept because it is the *second* migration this project has done and it
@@ -4265,16 +4350,30 @@ The driver's real message is in the app log — `grep 'could not get a connectio
 
 ## 8. Next session should
 
-**Phase 10 — the public demo — is built and NOT deployed** (2026-08-09). §9 is
-the design and the status. What is left is not code:
+**Phase 10 — the public demo — is DEPLOYED and DARK** (2026-08-09). Production
+serves `0.10.0`; `DBK_DEMO_ENABLED` is unset, so the feature is inert. §9m is
+the four-step enable, §9k the two open questions (pool size, and whether to link
+it anywhere public — they are the same question).
 
-1. **Deploy it**, with `DBK_DEMO_ENABLED` decided. Read §4vv first. The version
-   bump to `0.10.0` belongs to that deploy.
-2. **Then `POST /api/admin/demo/ensure` once**, and check the pool with
-   `GET /api/admin/demo`. Until that runs there are no demo accounts, and the
-   buttons on `/login` answer `demo_pool_busy`.
-3. **Decide the pool size and whether to link it publicly** — §9k, and the two
-   are the same question.
+**Three operational items the deploy turned up, none of them code:**
+
+1. **`db/backup.sh`'s retention pass cannot delete `2026-07-28_205506`** —
+   `Permission denied`, almost certainly a root-owned directory from the first
+   bring-up while cron has run as the ordinary user ever since. The backup
+   itself is unaffected: the prune runs *after* the publish `mv`, so the run
+   completes and is then reported as `backup FAILED` by a trap whose message
+   names a `.partial` path that no longer exists. **This has been failing every
+   night since the run count passed `KEEP=14`**, visible only in the cron log,
+   which is how it survived to be found during a deploy. Two fixes and they are
+   separate: `chown` the stale directory, and make the trap's message tell the
+   truth about *which* step failed.
+2. **The scrub moved `backup.sh`'s and compose's default paths** from
+   `/mnt/data` to `/mnt/bulk` (§7). Harmless here because `.env` sets both
+   explicitly — checked, both point at `/mnt/data`. It would not be harmless on
+   a box relying on the defaults.
+3. **`DBK_ARCHIVE_AFTER_DAYS` and the three sweep variables still never reach
+   the container** (§9l). Unchanged, still deliberate, still worth doing on its
+   own one day.
 
 Everything below this paragraph predates phase 10 and described a tree with
 nothing outstanding.
@@ -4501,8 +4600,8 @@ The numbered list below is the rest, and it is a menu rather than a queue.
 
 ## 9. Phase 10 — the public demo (BUILT 2026-08-09, NOT DEPLOYED)
 
-**Status.** Everything in §9j is built and green: 348 unit tests (18 new in
-`test/demo.test.mjs`), 421 with the live suites against a real cluster,
+**Status.** Everything in §9j is built and green: **330** non-live tests (18 new
+in `test/demo.test.mjs`), 415 with the live suites against a real cluster,
 `verify-isolation.sh` 41/41, `verify-auth.sh` 95/95, and the whole loop driven
 over HTTP against a throwaway server — pool created, a visitor claiming a slot
 and leaving a table behind, the slot handed back, the next claim finding it
@@ -4513,9 +4612,12 @@ countdown banner rendering on `/sql`. §5 says what that run did **not** cover.
 `false` unless set, and even with it set the accounts are created only by
 `POST /api/admin/demo/ensure` (§9c). Nothing about an upgrade turns this on.
 
-**Not deployed, and the version is still `0.9.0`.** The bump belongs to the
-deploy, the way every previous phase did it — see §7, and read §4vv first
-because `up -d` succeeding proves nothing.
+**DEPLOYED 2026-08-09, and serving `0.10.0`** — but **shipped dark**:
+`DBK_DEMO_ENABLED` is not set on production, so the code is inert, `/api/demo`
+answers 404 and no demo account exists. §7's phase-10 subsection is how the
+deploy went, and it went badly enough to be worth reading before the next one:
+it took production down for about twenty minutes for a reason that had nothing
+to do with this phase.
 
 
 
@@ -4714,6 +4816,28 @@ is `app_user.demo`.
    caps, and `test/demo.live.test.mjs` for what only a real cluster can show —
    that a reset actually drops workspaces, and that two demo visitors cannot read
    each other. The live suite takes the advisory lock like every other one.
+
+### 9m. Turning it on, once it is deployed dark
+
+Four steps, in this order, and the third is the one that actually creates
+anything:
+
+1. `DBK_DEMO_ENABLED=true` in the server's `.env` (plus `DBK_DEMO_STUDENTS` /
+   `DBK_DEMO_TEACHERS` if the defaults of 8 and 3 are wrong).
+2. **`docker compose up -d datebaenkli-app`, NOT `restart`.** `restart` reuses
+   the container's existing environment, so the new variable would not reach the
+   process and the demo would appear not to work for no visible reason.
+3. `POST /api/admin/demo/ensure` as an admin, once. This is what creates the
+   Postgres roles; until it runs the buttons answer `demo_pool_busy`.
+4. `GET /api/admin/demo` to see the pool, then press a button in a browser.
+   `/api/version`-style curl proves the code is there; only a claim proves a
+   visitor gets a working, isolated account.
+
+To go back to dark: unset the variable and `up -d`. That makes the feature
+inert immediately — every demo session dies with it, since `/api/demo/start`
+refuses and existing leases expire on their own. It does **not** delete the
+pool, and it must not: those are real Postgres roles, and dropping one burns
+its identifier permanently (§9f).
 
 ### 9l. What the pre-flight caught, 2026-08-09
 
