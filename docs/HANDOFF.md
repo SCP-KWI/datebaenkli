@@ -3,7 +3,7 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.11.0`**. **The deployed version is not known to this file** — it was
+is on **`0.11.1`**. **The deployed version is not known to this file** — it was
 `0.10.0` for a long time, the author deployed again during the §14/§16 session,
 and nobody curled it afterwards. `curl /api/version` (§7), and do not trust the
 next sentence over it —
@@ -11,7 +11,8 @@ next sentence over it —
 §13 (the top bar, made one bar), §14 (the student handbook, which is the
 placeholder §13 left), §15 (the packaging test §14d asked for, and the language
 toggle), §16 (the password reveal, which had been misplaced since 0.10.2) and
-§17 (the first-run tour). **§17 carries a migration** — `meta/005_tour.sql`,
+§17 (the first-run tour, plus §17f — the demo skipped it, found in
+production). **§17 carries a migration** — `meta/005_tour.sql`,
 the first since phase 10 — so the next deploy is §7's schema-change shape, not
 the application-code-only one.
 **§14's contents are deployed** — the author pulled and rebuilt after §14d's
@@ -5625,3 +5626,38 @@ centred — the §16 geometry, inherited.
 each step, but focus is not trapped — Tab can leave it for the page behind. That
 is a deliberate limit of a tour over a live page rather than a modal, and it is
 untested with assistive tech.
+
+### 17f. The demo skipped the tour — 0.11.1, reported from production
+
+§17 shipped and the tour did not appear for the people most likely to need it.
+`routes/demo.ts` returned `landing: role === 'teacher' ? '/uebungen' : '/sql'`,
+so a demo visitor was deep-linked *past* `/` — the only page the tour runs on.
+An ordinary login goes to `/` and always did, which is why every test and every
+by-hand check passed: **the two paths into the app disagreed, and only one of
+them was ever exercised.**
+
+Both roles now land on `/`. The deep link existed on the reasonable-sounding
+argument that a 30-minute lease should not spend a click getting to the point;
+0.11.0 made it wrong and nothing said so.
+
+It is also better on its own terms, which is worth recording separately from the
+bug: a visitor dropped into `/uebungen` sees an empty list and has to work out
+what the app *is* from a page that assumes they already know. The overview says
+who they are and what the sections are, and hands them the tour.
+
+**The guard is in `test/tour.test.mjs`**, not in the demo suites, because the
+invariant belongs to the tour: *the demo lands where the tour runs*. It reads
+`landing` out of the route rather than hardcoding it on both sides, so a future
+deep link fails there rather than in front of a class. Proved by putting the old
+expression back — it fails, alone.
+
+**The lesson is the one §16 already taught in CSS.** Two files had to agree,
+nothing made them, and the disagreement was invisible from either side. Neither
+file was wrong when it was written; the second one made the first one wrong, and
+that is the class of bug this repo keeps paying for. When a feature depends on
+where a user *is*, every route that puts them somewhere is part of the feature.
+
+Verified against a real server by pressing both demo buttons in a browser:
+teacher lands on `/` with "Schritt 1 von 5" on `Klassen`, student with "Schritt
+1 von 4" on `SQL-Editor`. 442 unit tests, `verify-auth.sh` 96/96,
+`demo.live.test.mjs` 6/6.

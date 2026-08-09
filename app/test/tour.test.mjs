@@ -13,6 +13,8 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import de from '../src/web/assets/i18n-de.js';
@@ -80,4 +82,33 @@ test('tour: the two roles are told different things', () => {
   for (const { key } of STEPS.student) {
     assert.ok(!teacher.has(key), `${key}: shared between the teacher and student tours`);
   }
+});
+
+/**
+ * The demo lands where the tour runs.
+ *
+ * These are two files that have to agree and nothing made them: `home.js` runs
+ * the tour on `/` and `routes/demo.ts` decides where a demo visitor is sent.
+ * 0.11.0 shipped with the second deep-linking past the first — `/uebungen` for
+ * a teacher, `/sql` for a student — so every demo visitor skipped the tour, and
+ * the only thing that caught it was a person pressing the button in production.
+ *
+ * Read out of the route rather than hardcoded on both sides, so this fails when
+ * the value changes rather than agreeing with a copy of itself. If `landing`
+ * ever needs to be conditional again, the condition belongs here as an
+ * assertion about every branch, not as a looser regex.
+ */
+test('tour: the demo lands on the page the tour runs on', () => {
+  const source = readFileSync(
+    join(import.meta.dirname, '..', 'src', 'routes', 'demo.ts'),
+    'utf8',
+  ).replace(/\/\*[\s\S]*?\*\//g, '');
+
+  const matches = [...source.matchAll(/\blanding:\s*(.+?),?\n/g)].map((m) => m[1].trim());
+  assert.equal(matches.length, 1, `expected one landing, found ${matches.length}`);
+  assert.equal(
+    matches[0],
+    "'/'",
+    'the demo landing is not the overview — a demo visitor would skip the tour',
+  );
 });

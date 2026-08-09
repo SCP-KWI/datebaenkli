@@ -95,7 +95,26 @@ export function registerDemoRoutes(app: FastifyInstance, db: Db, demo: DemoServi
       username: lease.username,
       role: lease.role,
       expiresAt: lease.expiresAt.toISOString(),
-      landing: role === 'teacher' ? '/uebungen' : '/sql',
+      /**
+       * **The overview, for both roles, and the same page an ordinary login
+       * lands on.** It used to deep-link — `/uebungen` for a teacher, `/sql`
+       * for a student — on the reasoning that a 30-minute lease should not
+       * spend a click getting to the point.
+       *
+       * 0.11.0 made that wrong and nothing failed: the first-run tour runs on
+       * `/` only, so every demo visitor skipped past the one thing built to
+       * explain the app to someone who has never seen it. Reported from
+       * production, where a teacher pressed the demo button and got no tour.
+       *
+       * Landing here is also just better. A visitor dropped into `/uebungen`
+       * sees an empty list and has to work out what the app *is* from the page
+       * that assumes they already know; the overview says who they are, what
+       * the sections are, and hands them the tour.
+       *
+       * `test/tour.test.mjs` now pins this to the page the tour runs on, so a
+       * future deep link fails there rather than in front of a class.
+       */
+      landing: '/',
     };
   });
 
