@@ -292,7 +292,7 @@ footer {
   </div>
   <h1>Handbuch für Lehrpersonen</h1>
   <p class="lede">Eine echte PostgreSQL-Datenbank pro Lernende — im Browser, ohne Installation auf einem einzigen Gerät. Du verteilst Zettel, die Klasse tippt SQL.</p>
-  <p class="meta">Stand: Juli 2026 · Version 0.8.1 · Fragen und Zugänge: philip.schaffner@kwi.ch</p>
+  <p class="meta">Stand: August 2026 · Version 0.10.1 · Fragen und Zugänge: philip.schaffner@kwi.ch</p>
 </header>
 
 <nav class="toc" aria-label="Inhalt">
@@ -337,7 +337,7 @@ footer {
 </ul>
 
 <h3>Was Datebänkli nicht ist</h3>
-<p>Keine Aufgabenverwaltung: Es gibt keine Übungen, keine automatische Korrektur und keine Abgaben. Aufgaben stellst du weiterhin auf dem Arbeitsblatt. Kein Notenprogramm. Kein Ersatz für ein Datenbankwerkzeug wie pgAdmin — das kann viel mehr und ist für eine erste Lektion viel zu viel. Und es ist keine Ablage für Daten, die wirklich schützenswert sind: Was in einer Lernendendatenbank landet, ist Übungsmaterial.</p>
+<p>Keine automatische Korrektur: Übungen verteilen und Abgaben einsammeln kannst du (<a href="#uebungen">Abschnitt 10</a>), aber ob eine Lösung stimmt, entscheidest du beim Lesen — es gibt keine Musterlösung, keine Punkte und kein «richtig/falsch» aus der App. Kein Notenprogramm. Kein Ersatz für ein Datenbankwerkzeug wie pgAdmin — das kann viel mehr und ist für eine erste Lektion viel zu viel. Und es ist keine Ablage für Daten, die wirklich schützenswert sind: Was in einer Lernendendatenbank landet, ist Übungsmaterial.</p>
 </section>
 
 <!-- ==================================================================== -->
@@ -373,12 +373,19 @@ footer {
 
 <p>Die Adresse lautet <a href="https://datebaenkli.schaffner.xyz">datebaenkli.schaffner.xyz</a>. Sie steht auch auf jedem Zettel, den du druckst.</p>
 
+<h3>Vorher ausprobieren, ohne Konto</h3>
+<p>Auf der Anmeldeseite stehen unter dem Formular zwei Knöpfe: <span class="ui">Als Schüler:in</span> und <span class="ui">Als Lehrperson</span>. Ein Klick darauf öffnet sofort einen fertigen Zugang — es gibt nichts abzutippen, weder Benutzername noch Passwort, und niemand muss vorher eine Mail schreiben. Wer wissen will, ob sich das Werkzeug für die eigene Klasse eignet, schaut so in vier Minuten nach.</p>
+
+<p>Es ist ein Zugang zum Wegwerfen. Nach <strong>30 Minuten</strong> ist Schluss, und diese Zeit lässt sich nicht verlängern; unten links läuft sie mit, daneben steht <span class="ui">Beenden</span>, falls du früher fertig bist. Danach wird alles gelöscht, was in dieser halben Stunde entstanden ist — die nächste Person, die den Knopf drückt, beginnt in einem leeren Bereich. Nimm also nichts hinein, was du behalten willst, und nichts, was niemanden angeht.</p>
+
+<p>Der Lehrpersonen-Zugang bringt eine Klasse mit einigen Lernenden bereits mit, damit Klassenliste und Lektionsansicht etwas zu zeigen haben. Neue Klassen und neue Lernende lassen sich darin nicht anlegen — du siehst die Masken, aber angelegt wird nichts. Dafür braucht es ein richtiges Konto, und das gibt es auf dem Weg oben.</p>
+
 <h3>Anmelden</h3>
 {{FIG:login}}
 <ol class="legend">
   <li><strong>Benutzername.</strong> Keine E-Mail-Adresse, sondern ein kurzer Name wie <code>t_brunner</code> — dieselbe Zeichenkette, die später in SQL auftaucht. Für Lernende ist er nach demselben Muster gebaut: <code>u_i3a_buehler_nino</code>.</li>
   <li><strong>Passwort</strong> vom Zettel.</li>
-  <li><span class="ui">Anmelden</span>. Die Sitzung hält 12 Stunden und verlängert sich bei jedem Klick — ein Schultag ist also abgedeckt, die Nacht nicht.</li>
+  <li><span class="ui">Anmelden</span>. Die Sitzung hält 12 Stunden und verlängert sich bei jedem Klick — ein Schultag ist also abgedeckt, die Nacht nicht. Die einzige Ausnahme ist der Demo-Zugang von oben: Der endet nach 30 Minuten und verlängert sich nicht.</li>
 </ol>
 
 <p>Nach dem Anmelden landest du auf der Übersicht. Sie ist bewusst karg: Sie sagt, wer du bist und welche Klassen dir gehören, und schickt dich weiter.</p>
@@ -780,7 +787,7 @@ footer {
 
 <details class="faq">
   <summary>Wo sind die Aufgaben?</summary>
-  <p>Es gibt keine. Datebänkli stellt die Umgebung, nicht den Auftrag — Aufgaben, Reihenfolge und Korrektur bleiben bei dir und deinem Arbeitsblatt. Was du als Kontrolle hast, ist die Lektionsansicht: Befehle und Tabellen jeder Person, in Echtzeit.</p>
+  <p>Aufgaben stellst du selbst — entweder auf dem Arbeitsblatt wie bisher, oder als Übung mit eigenen Tabellen und Aufgabenstellung, die jede Person als eigene Kopie bekommt (<a href="#uebungen">Abschnitt 10</a>). Eine Aufgabensammlung bringt Datebänkli nicht mit. Korrigiert wird auch nichts: Die App prüft keine Lösung und vergibt keine Punkte, sie sammelt die Abgaben ein und legt sie dir zum Lesen hin. Was währenddessen passiert, siehst du in der Lektionsansicht — Befehle und Tabellen jeder Person, in Echtzeit.</p>
 </details>
 </section>
 

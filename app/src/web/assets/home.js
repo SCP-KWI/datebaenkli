@@ -134,6 +134,12 @@ else {
   // Everyone but an admin: a student has exercises handed to them, a teacher
   // authors them, and an admin has no Postgres identity to hold either.
   byId('exercises').hidden = user.role === 'admin';
+  // Not for a demo lease. The account is thrown away in half an hour, so the
+  // link leads to a form whose only possible outcome is a password nobody will
+  // ever type again — and to a first-time visitor it reads as a setup step the
+  // demo is asking them to complete. `me.demo` is null for every real account,
+  // which is what makes this the whole test.
+  byId('change').hidden = Boolean(me.demo);
 }
 
 byId('sql').onclick = () => (location.href = '/sql');

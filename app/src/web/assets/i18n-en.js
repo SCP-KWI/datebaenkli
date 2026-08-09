@@ -324,6 +324,7 @@ export default {
   'common.no_classes': 'No classes yet.',
   'common.class_empty': 'Nobody is in this class yet.',
   'common.failed': 'That did not work ({status}).',
+  'common.error': 'That did not work',
   'common.role_admin': 'Administration',
   'common.role_teacher': 'Teacher',
   'common.role_student': 'Student',
@@ -415,9 +416,10 @@ export default {
   'roster.archive': 'Archive',
   'roster.activate': 'Activate',
   'roster.remove': 'Remove from class',
-  'roster.reissue_one': 'New slip for the one student who has never signed in',
-  'roster.reissue_many': 'New slips for the {count} students who have never signed in',
-  'roster.reissue_note': ' — for anyone else this would invalidate a slip already in use.',
+  'roster.reissue': 'Issue new slips',
+  'roster.reissue_one': 'Affects the one student who has never signed in.',
+  'roster.reissue_many': 'Affects {count} students who have never signed in.',
+  'roster.reissue_note': 'For anyone else this would invalidate a slip already in use.',
   'roster.reissue_confirm':
     'Issue new slips for {count} students? Only accounts that have never signed in are ' +
     'affected.',
@@ -447,6 +449,7 @@ export default {
   'roster.delete_confirm':
     'Delete {name} for good?\n\nThis is not the same as "Remove from class" — the whole ' +
     'account goes.',
+  'roster.delete_final': 'Really delete?',
   'roster.delete_confirm_final':
     'To be clear: {name} ({username})\n\nTheir schema and every table in it will be ' +
     'dropped. A backup stays on the server, but this application cannot restore the ' +
@@ -535,6 +538,14 @@ export default {
   'ex.task': 'Task (Markdown)',
   'ex.preview': 'Preview',
   'ex.saved': 'Saved.',
+  'ex.unsaved': 'The title and task text are not saved yet.',
+  'ex.discard': 'Discard',
+  'ex.discard_confirm':
+    'Discard the changes to the title and task text? The saved version comes back.',
+  'ex.unsaved_title': 'Unsaved changes',
+  'ex.unsaved_leave':
+    'This exercise has unsaved changes to its title or task text. Switching to another ' +
+    'exercise loses them.',
   'ex.tables': 'The exercise’s tables',
   'ex.no_tables': 'No tables yet. Every student gets their own copy of these.',
   'ex.add_csv': 'Add CSV',
@@ -542,6 +553,7 @@ export default {
   'ex.csv_summary': '{rows} rows, {columns} columns',
   'ex.sql_summary': 'Script',
   'ex.move_up': 'Move up',
+  'ex.move_down': 'Move down',
   'ex.sql_title': 'SQL script',
   'ex.sql_label': 'Label',
   'ex.sql_body': 'Script',

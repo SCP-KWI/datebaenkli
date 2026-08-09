@@ -355,6 +355,10 @@ export default {
   // The last resort of `send()` in `roster.js`: a non-2xx whose body carried no
   // error shape at all. The status number is in it because it is all there is.
   'common.failed': 'Fehlgeschlagen ({status}).',
+  // The *heading* over a failure, where `common.failed` is one of the sentences
+  // that can appear under it. Separate because a heading has no room for a
+  // status number and no sentence to end — the two look alike and are not.
+  'common.error': 'Fehlgeschlagen',
   'common.role_admin': 'Administration',
   'common.role_teacher': 'Lehrperson',
   'common.role_student': 'Lernende:r',
@@ -456,9 +460,13 @@ export default {
   'roster.archive': 'Archivieren',
   'roster.activate': 'Aktivieren',
   'roster.remove': 'Aus Klasse',
-  'roster.reissue_one': 'Neue Zettel für eine:n Lernende:n ohne erste Anmeldung',
-  'roster.reissue_many': 'Neue Zettel für {count} Lernende ohne erste Anmeldung',
-  'roster.reissue_note': ' — für alle anderen wäre das ein bereits benutzter Zugang.',
+  // The button says the action; the two sentences under it say who it touches
+  // and why it is only offered for them. They used to be one string on the
+  // button, which read as a caption rather than as something to press.
+  'roster.reissue': 'Neue Zettel ausstellen',
+  'roster.reissue_one': 'Betrifft eine:n Lernende:n ohne erste Anmeldung.',
+  'roster.reissue_many': 'Betrifft {count} Lernende ohne erste Anmeldung.',
+  'roster.reissue_note': 'Für alle anderen wäre das ein bereits benutzter Zugang.',
   'roster.reissue_confirm':
     'Neue Zettel für {count} Lernende ausstellen? Betroffen sind nur Konten ohne erste ' +
     'Anmeldung.',
@@ -496,6 +504,9 @@ export default {
   'roster.delete_confirm':
     '{name} endgültig löschen?\n\nDas ist etwas anderes als "Aus Klasse" — das Konto ' +
     'verschwindet ganz.',
+  // The heading of step two. It must not repeat step one's, or the second
+  // dialog reads as the first one shown again rather than as a last question.
+  'roster.delete_final': 'Wirklich löschen?',
   'roster.delete_confirm_final':
     'Wirklich: {name} ({username})\n\nDas Schema und alle Tabellen darin werden gelöscht. ' +
     'Eine Sicherung bleibt auf dem Server liegen, aber diese Anwendung kann das Konto nicht ' +
@@ -591,6 +602,18 @@ export default {
   'ex.task': 'Aufgabenstellung (Markdown)',
   'ex.preview': 'Vorschau',
   'ex.saved': 'Gespeichert.',
+  // Titel und Aufgabenstellung werden erst auf Knopfdruck gespeichert, die
+  // Tabellen darunter sofort. Diese vier Zeilen sind das, was diesen
+  // Unterschied sichtbar macht, statt ihn den Text kosten zu lassen.
+  'ex.unsaved': 'Titel und Aufgabenstellung sind noch nicht gespeichert.',
+  'ex.discard': 'Verwerfen',
+  'ex.discard_confirm':
+    'Die Änderungen an Titel und Aufgabenstellung verwerfen? Der gespeicherte Stand kommt ' +
+    'zurück.',
+  'ex.unsaved_title': 'Ungespeicherte Änderungen',
+  'ex.unsaved_leave':
+    'An Titel und Aufgabenstellung dieser Übung ist etwas ungespeichert. Beim Wechsel zu ' +
+    'einer anderen Übung geht es verloren.',
   'ex.tables': 'Tabellen der Übung',
   'ex.no_tables': 'Noch keine Tabellen. Jede Lernende bekommt eine eigene Kopie davon.',
   'ex.add_csv': 'CSV hinzufügen',
@@ -598,6 +621,7 @@ export default {
   'ex.csv_summary': '{rows} Zeilen, {columns} Spalten',
   'ex.sql_summary': 'Skript',
   'ex.move_up': 'Nach oben',
+  'ex.move_down': 'Nach unten',
   'ex.sql_title': 'SQL-Skript',
   'ex.sql_label': 'Bezeichnung',
   'ex.sql_body': 'Skript',

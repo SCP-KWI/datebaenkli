@@ -233,11 +233,13 @@ classSelect.addEventListener('change', () => void poll());
 windowSelect.addEventListener('change', () => void poll());
 
 // `location.href = …` does not stop the script, so the redirects below have to
-// be followed by one that does. Without it every request beneath this point is
-// fired into a page that is already navigating away — harmless but pointless —
-// and `me.user` would have to be read defensively for a `me` that is only null
-// when we are leaving anyway. `sql.js` throws after its redirects for the same
-// reason.
+// be followed by something that does. Without it every request beneath this
+// point is fired into a page that is already navigating away — harmless but
+// pointless — and `me.user` would have to be read defensively for a `me` that is
+// only null when we are leaving anyway. `sql.js` stops after its redirects for
+// the same reason, and by the same means: a promise that never settles rather
+// than a `throw`, which was an uncaught exception in the console on every
+// correct redirect. That noise is what a real fault has to stand out against.
 // Started before the cached paint rather than awaited, so the round trip hides
 // behind the first frame instead of sitting in front of it (`paintCached()`).
 const mePromise = get('/api/me');
@@ -249,7 +251,7 @@ const paintTheme = wireThemeToggle($('theme'), (dark) =>
 const me = await mePromise;
 if (!me) location.href = '/login';
 else if (me.user.role === 'student') location.href = '/sql';
-if (!me || me.user.role === 'student') throw new Error('redirecting');
+if (!me || me.user.role === 'student') await new Promise(() => {});
 
 /**
  * Before anything renders. The page ships with German in its markup and this

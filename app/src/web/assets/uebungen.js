@@ -32,12 +32,35 @@
  * string.** The task is text one person writes and twenty-five read, and it is
  * the only untrusted-ish thing in this app that reaches `innerHTML`. That module
  * escapes first and inserts tags second; anything else here uses `esc()`.
+ *
+ * ## The draft, and the bug it exists for
+ *
+ * This screen has two save models on it and always did: the title and the task
+ * are held until "Speichern", while a table, a distribution and a take-back
+ * commit the moment their dialog closes. That is not sloppiness — a `<textarea>`
+ * that saved on every keystroke would write a row per character — but the two
+ * models met badly. Every action in the lower half ends in `openExercise()`,
+ * which refetches and repaints the pane, and the repaint took the typed title
+ * and task with it. A teacher who wrote the task first and added the tables
+ * second — the natural order — lost the text with no warning and no way back.
+ *
+ * `draft` is the fix and it is deliberately not autosave: what is on screen is
+ * kept across a repaint, said out loud in a bar that only appears while it is
+ * true, and is still the teacher's to save or discard. `beforeunload` covers the
+ * one exit a repaint cannot: closing the tab.
  */
 
 import { openImportDialog, post } from '/assets/csv-import.js';
 import { apply, errorText, formats, load, paintCached, t, wireLanguageSelect } from '/assets/i18n.js';
 import { renderMarkdown } from '/assets/markdown.js';
-import { esc, json, mountDemoBanner, mountVersion, wireThemeToggle } from '/assets/util.js';
+import {
+  confirmDialog,
+  esc,
+  json,
+  mountDemoBanner,
+  mountVersion,
+  wireThemeToggle,
+} from '/assets/util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -46,6 +69,42 @@ let list = [];
 let classes = [];
 /** The exercise open in the detail pane, in full. Null when none is. */
 let open = null;
+
+/**
+ * The unsaved title and task, when they differ from the saved exercise.
+ * `{ id, title, taskMd }`, or null when the form matches what the server holds.
+ *
+ * **It carries the exercise's id**, which is the whole reason it is an object
+ * rather than two strings: the same pane shows any exercise in the list, and a
+ * draft applied to the wrong one would be worse than the loss it prevents — it
+ * would overwrite a second exercise with the first one's text.
+ */
+let draft = null;
+
+/**
+ * Read the form into `draft`, before anything repaints over it.
+ *
+ * Comparing against `open` rather than tracking an `oninput` flag: typing a
+ * character and deleting it again leaves no change to save, and an indicator
+ * that lights up for that teaches the reader to ignore it.
+ */
+function captureDraft() {
+  if (!open || !$('title')) return;
+  const title = $('title').value;
+  const taskMd = $('task').value;
+  draft =
+    title === open.title && taskMd === open.taskMd ? null : { id: open.id, title, taskMd };
+}
+
+/** The draft's values if they belong to the exercise on screen; null otherwise. */
+const draftFor = (id) => (draft && draft.id === id ? draft : null);
+
+/** Paint the unsaved-changes bar. Called on every keystroke, so it does no work. */
+function paintDirty() {
+  const dirty = Boolean(draftFor(open?.id));
+  const bar = $('unsaved');
+  if (bar) bar.hidden = !dirty;
+}
 
 // --- transport ---------------------------------------------------------------
 
@@ -182,7 +241,28 @@ async function reloadList() {
   renderList();
 }
 
+/**
+ * Fetch an exercise and show it.
+ *
+ * Called both to *switch* exercises and to repaint the one already open after
+ * something in the lower half of the pane changed the server's copy. Those two
+ * want opposite things from an unsaved draft — a repaint must keep it, a switch
+ * must not carry it to another exercise — which is why the capture happens first
+ * and the discard question is asked only when the id actually changes.
+ */
 async function openExercise(id) {
+  captureDraft();
+  if (draft && draft.id !== id) {
+    const discard = await confirmDialog({
+      title: t('ex.unsaved_title'),
+      body: t('ex.unsaved_leave'),
+      confirmLabel: t('ex.discard'),
+      cancelLabel: t('common.cancel'),
+    });
+    if (!discard) return;
+    draft = null;
+  }
+
   const payload = await get(`/api/exercises/${id}`);
   if (!payload) return;
   open = payload.exercise;
@@ -202,11 +282,16 @@ function renderDetail() {
     return;
   }
 
+  // The draft, where there is one, is what the fields show — this function runs
+  // after every table change, and rendering `open` here is precisely the bug it
+  // used to have.
+  const shown = draftFor(open.id) ?? open;
+
   $('detail').innerHTML = `
     <div class="card stack">
       <div class="hstack ex-detail-head">
         <input type="text" id="title" class="ex-title" maxlength="200"
-               value="${esc(open.title)}" />
+               value="${esc(shown.title)}" />
         <button id="save" class="primary small">${esc(t('common.save'))}</button>
         <button id="del" class="btn-danger small">${esc(t('common.delete'))}</button>
       </div>
@@ -214,7 +299,7 @@ function renderDetail() {
 
       <div class="ex-task-edit">
         <label class="block"><span>${esc(t('ex.task'))}</span>
-          <textarea id="task" rows="10" spellcheck="true">${esc(open.taskMd)}</textarea>
+          <textarea id="task" rows="10" spellcheck="true">${esc(shown.taskMd)}</textarea>
         </label>
         <div>
           <span class="eyebrow">${esc(t('ex.preview'))}</span>
@@ -253,8 +338,16 @@ function renderDetail() {
                              ? `<button class="small" data-edit="${source.id}">${esc(t('common.edit'))}</button>`
                              : ''
                          }
+                         <!-- Both arrows, not just "↑". One arrow does move a
+                              row down — you move the row *below* it up — and a
+                              teacher should not have to work that out. -->
                          <button class="small" data-up="${source.id}" ${i === 0 ? 'disabled' : ''}
+                                 title="${esc(t('ex.move_up'))}"
                                  aria-label="${esc(t('ex.move_up'))}">↑</button>
+                         <button class="small" data-down="${source.id}"
+                                 ${i === open.sources.length - 1 ? 'disabled' : ''}
+                                 title="${esc(t('ex.move_down'))}"
+                                 aria-label="${esc(t('ex.move_down'))}">↓</button>
                          <button class="small btn-danger" data-drop="${source.id}"
                                  >${esc(t('common.delete'))}</button>
                        </td>
@@ -320,14 +413,37 @@ function renderDetail() {
         <a class="btn small" href="/sql?uebung=${open.id}">${esc(t('ex.open_editor'))}</a>
         <span class="small" id="tryStatus"></span>
       </div>
+    </div>
+
+    <!--
+      The unsaved-changes bar. Two problems in one control, both from the
+      usability pass: there was no cue at all that a Speichern was still owed,
+      and the only Speichern is at the very top of a pane long enough that a
+      teacher adding tables cannot see it. Sticky to the bottom of the viewport,
+      so it is under the hand that just typed; hidden whenever there is nothing
+      to save, so the screen is unchanged the rest of the time.
+    -->
+    <div class="ex-unsaved" id="unsaved" hidden>
+      <span>${esc(t('ex.unsaved'))}</span>
+      <button id="discard" class="small">${esc(t('ex.discard'))}</button>
+      <button id="saveBottom" class="primary small">${esc(t('common.save'))}</button>
     </div>`;
 
-  $('taskPreview').innerHTML = renderMarkdown(open.taskMd);
+  $('taskPreview').innerHTML = renderMarkdown(shown.taskMd);
+  $('title').oninput = () => {
+    captureDraft();
+    paintDirty();
+  };
   $('task').oninput = () => {
     $('taskPreview').innerHTML = renderMarkdown($('task').value);
+    captureDraft();
+    paintDirty();
   };
+  paintDirty();
 
   $('save').onclick = () => void saveExercise();
+  $('saveBottom').onclick = () => void saveExercise();
+  $('discard').onclick = () => void discardDraft();
   $('del').onclick = () => void deleteExercise();
   $('addCsv').onclick = () => void addCsv();
   $('addSql').onclick = () => void editSql(null);
@@ -341,7 +457,10 @@ function renderDetail() {
     button.onclick = () => void dropSource(Number(button.dataset.drop));
   }
   for (const button of $('detail').querySelectorAll('[data-up]')) {
-    button.onclick = () => void moveUp(Number(button.dataset.up));
+    button.onclick = () => void move(Number(button.dataset.up), -1);
+  }
+  for (const button of $('detail').querySelectorAll('[data-down]')) {
+    button.onclick = () => void move(Number(button.dataset.down), 1);
   }
   for (const button of $('detail').querySelectorAll('[data-take]')) {
     button.onclick = () => void takeBack(Number(button.dataset.take));
@@ -366,16 +485,51 @@ async function saveExercise() {
   }
   // The list's titles and its ordering both come from what was just saved.
   open = { ...open, ...payload.exercise };
+  // Saved is saved: the draft has become the exercise, and leaving it set would
+  // keep the bar on screen claiming otherwise.
+  draft = null;
+  paintDirty();
   status.className = 'msg quiet';
   status.textContent = t('ex.saved');
   await reloadList();
 }
 
+/** Throw the draft away and put the saved text back on screen. */
+async function discardDraft() {
+  const yes = await confirmDialog({
+    title: t('ex.discard'),
+    body: t('ex.discard_confirm'),
+    confirmLabel: t('ex.discard'),
+    cancelLabel: t('common.cancel'),
+  });
+  if (!yes) return;
+  draft = null;
+  renderDetail();
+}
+
 async function deleteExercise() {
-  if (!confirm(t('ex.delete_confirm', { title: open.title }))) return;
+  if (
+    !(await confirmDialog({
+      title: t('common.delete'),
+      body: t('ex.delete_confirm', { title: open.title }),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+    }))
+  ) {
+    return;
+  }
   // The second dialog states what does not survive rather than repeating the
   // first. See this file's header, and `roster.js`'s.
-  if (!confirm(t('ex.delete_confirm_final', { title: open.title }))) return;
+  if (
+    !(await confirmDialog({
+      title: t('common.delete'),
+      body: t('ex.delete_confirm_final', { title: open.title }),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+    }))
+  ) {
+    return;
+  }
   const [, error] = await send(`/api/exercises/${open.id}`, json(undefined, 'DELETE'));
   if (error) {
     $('saveStatus').className = 'msg bad';
@@ -383,6 +537,8 @@ async function deleteExercise() {
     return;
   }
   open = null;
+  // The exercise it belonged to no longer exists.
+  draft = null;
   await reloadList();
   renderDetail();
 }
@@ -443,7 +599,13 @@ async function editSql(sourceId) {
 
 async function dropSource(sourceId) {
   const source = open.sources.find((s) => s.id === sourceId);
-  if (!confirm(t('ex.drop_source_confirm', { label: source?.label ?? '' }))) return;
+  const yes = await confirmDialog({
+    title: t('common.delete'),
+    body: t('ex.drop_source_confirm', { label: source?.label ?? '' }),
+    confirmLabel: t('common.delete'),
+    cancelLabel: t('common.cancel'),
+  });
+  if (!yes) return;
   const [, error] = await send(
     `/api/exercises/${open.id}/sources/${sourceId}`,
     json(undefined, 'DELETE'),
@@ -456,11 +618,13 @@ async function dropSource(sourceId) {
   await openExercise(open.id);
 }
 
-async function moveUp(sourceId) {
+/** `step` is -1 for the up arrow and +1 for the down one. */
+async function move(sourceId, step) {
   const ids = open.sources.map((s) => s.id);
   const at = ids.indexOf(sourceId);
-  if (at <= 0) return;
-  [ids[at - 1], ids[at]] = [ids[at], ids[at - 1]];
+  const to = at + step;
+  if (at < 0 || to < 0 || to >= ids.length) return;
+  [ids[to], ids[at]] = [ids[at], ids[to]];
   const [, error] = await send(`/api/exercises/${open.id}/sources/order`, json({ ids }));
   if (error) {
     $('sourceStatus').className = 'msg bad';
@@ -485,21 +649,27 @@ async function distribute() {
 
 async function takeBack(classId) {
   const assignment = open.assignments.find((a) => a.classId === classId);
-  if (!confirm(t('ex.take_back_confirm', { klass: assignment?.code ?? '' }))) return;
+  const asked = await confirmDialog({
+    title: t('ex.take_back'),
+    body: t('ex.take_back_confirm', { klass: assignment?.code ?? '' }),
+    confirmLabel: t('ex.take_back'),
+    cancelLabel: t('common.cancel'),
+  });
+  if (!asked) return;
   // The second dialog names the numbers rather than repeating the question:
   // this is the one action on the page that destroys other people's work, and
   // the count is what makes that concrete.
-  if (
-    !confirm(
-      t('ex.take_back_confirm_final', {
-        klass: assignment?.code ?? '',
-        workspaces: assignment?.openedBy ?? 0,
-        handins: assignment?.submissions ?? 0,
-      }),
-    )
-  ) {
-    return;
-  }
+  const confirmed = await confirmDialog({
+    title: t('ex.take_back'),
+    body: t('ex.take_back_confirm_final', {
+      klass: assignment?.code ?? '',
+      workspaces: assignment?.openedBy ?? 0,
+      handins: assignment?.submissions ?? 0,
+    }),
+    confirmLabel: t('ex.take_back'),
+    cancelLabel: t('common.cancel'),
+  });
+  if (!confirmed) return;
 
   const [payload, error] = await send(
     `/api/exercises/${open.id}/classes/${classId}`,
@@ -510,6 +680,9 @@ async function takeBack(classId) {
     $('giveStatus').textContent = error;
     return;
   }
+  // The one repaint that does not go through `openExercise()`, so the draft has
+  // to be taken here — `renderDetail()` is about to replace the fields.
+  captureDraft();
   open = payload.exercise;
   renderDetail();
   // Reported rather than swallowed: one schema that would not drop leaves the
@@ -607,6 +780,24 @@ $('lesson').onclick = () => (location.href = '/lesson');
 $('roster').onclick = () => (location.href = '/roster');
 $('overview').onclick = () => (location.href = '/');
 $('handinClose').onclick = () => $('handinDialog').close();
+
+/**
+ * The last exit a repaint cannot cover: the tab, the back button, one of the
+ * nav buttons above.
+ *
+ * The browser shows its own wording here and ignores ours — every engine stopped
+ * honouring the returned string years ago, because a page could put anything in
+ * it. That is fine: the point is the pause, and the bar on screen has already
+ * said what is unsaved in the app's own words.
+ */
+addEventListener('beforeunload', (event) => {
+  captureDraft();
+  if (!draft) return;
+  event.preventDefault();
+  // Still assigned, for the handful of old builds that key off it rather than
+  // off `preventDefault()`.
+  event.returnValue = '';
+});
 
 if (staff) {
   $('teach').hidden = false;

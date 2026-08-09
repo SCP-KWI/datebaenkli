@@ -39,7 +39,15 @@
 
 import { apply, errorText, formats, load, paintCached, t, wireLanguageSelect } from './i18n.js';
 import { parseNames } from './names.js';
-import { esc, json, mountDemoBanner, mountVersion, wireThemeToggle } from './util.js';
+import {
+  alertDialog,
+  confirmDialog,
+  esc,
+  json,
+  mountDemoBanner,
+  mountVersion,
+  wireThemeToggle,
+} from './util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -89,6 +97,27 @@ async function send(url, options) {
   }
   return [payload, null];
 }
+
+// --- asking, and reporting ---------------------------------------------------
+
+/**
+ * The page's questions, all of which cancel the same way.
+ *
+ * Only that default is shared: the wording stays at each call site, because
+ * *which* sentence a destructive dialog shows is the safeguard, and it has to be
+ * readable beside the thing it guards. `danger` is `confirmDialog`'s own default
+ * and most questions here take it — the two that do not say why at the site.
+ */
+const ask = (options) => confirmDialog({ cancelLabel: t('common.cancel'), ...options });
+
+/**
+ * Every failure path reports the same way, and the shape is worth naming once:
+ * `send()` has already turned the code into a German or English sentence, and a
+ * whole sentence is a `body`, never a `title`. The heading says only that it did
+ * not work — which is all a heading can say about an error nobody predicted.
+ */
+const showError = (message) =>
+  alertDialog({ title: t('common.error'), body: message, okLabel: t('common.close') });
 
 // --- the slip view -----------------------------------------------------------
 
@@ -217,19 +246,33 @@ async function loadTeachers() {
 }
 
 async function reslipTeacher(id) {
-  if (!confirm(t('roster.reslip_teacher_confirm'))) return;
+  const go = await ask({
+    title: t('roster.reslip'),
+    body: t('roster.reslip_teacher_confirm'),
+    confirmLabel: t('roster.reslip'),
+  });
+  if (!go) return;
   const [created, error] = await send(`/api/teachers/${id}/password`, json());
-  if (error) return alert(error);
+  if (error) return void showError(error);
   showSlips([created], t('roster.slips_reslip'));
 }
 
 $('t-create').addEventListener('click', async () => {
   const firstName = $('t-first').value.trim();
   const lastName = $('t-last').value.trim();
-  if (!firstName || !lastName) return alert(t('roster.name_required'));
+  // The heading names what was being attempted; the catalogue string says what
+  // is missing. That split is why these keep their own titles rather than the
+  // "went wrong" one — nothing went wrong, the form is simply not finished.
+  if (!firstName || !lastName) {
+    return void alertDialog({
+      title: t('roster.teacher_new'),
+      body: t('roster.name_required'),
+      okLabel: t('common.close'),
+    });
+  }
 
   const [created, error] = await send('/api/teachers', json({ firstName, lastName }));
-  if (error) return alert(error);
+  if (error) return void showError(error);
   $('t-first').value = '';
   $('t-last').value = '';
   await loadTeachers();
@@ -269,7 +312,13 @@ $('c-create').addEventListener('click', async () => {
   const code = $('c-code').value.trim();
   const name = $('c-name').value.trim();
   const schoolYear = $('c-year').value.trim();
-  if (!code || !name) return alert(t('roster.class_required'));
+  if (!code || !name) {
+    return void alertDialog({
+      title: t('roster.class_new'),
+      body: t('roster.class_required'),
+      okLabel: t('common.close'),
+    });
+  }
 
   const [payload, error] = await send(
     '/api/classes',
@@ -280,7 +329,7 @@ $('c-create').addEventListener('click', async () => {
       ...(me.user.role === 'admin' ? { teacherId: Number($('c-teacher').value) } : {}),
     }),
   );
-  if (error) return alert(error);
+  if (error) return void showError(error);
   $('c-code').value = '';
   $('c-name').value = '';
   await loadClasses();
@@ -358,15 +407,21 @@ async function loadRoster() {
   // the reason "Erste Anmeldung" is a column: the teacher can see for
   // themselves which accounts the button will touch before pressing it.
   //
+  // **The label is the action and nothing else.** It used to be the whole
+  // sentence, with the caveat trailing inline beside it, and a usability pass
+  // found it read as a caption rather than as a control. The count and the
+  // caveat are prose, so they belong in prose — `<p class="quiet msg">` is what
+  // the rest of this page puts helper text in (roster.html).
+  //
   // Two keys rather than one with a `{count}`: German needs "eine:n Lernende:n"
   // in the singular, so the sentence changes in more places than the number.
   $('roster-msg').innerHTML = unused.length
-    ? `<button id="reissue">${esc(
-        unused.length === 1
-          ? t('roster.reissue_one')
-          : t('roster.reissue_many', { count: unused.length }),
-      )}</button>
-       <span class="quiet">${esc(t('roster.reissue_note'))}</span>`
+    ? `<button id="reissue">${esc(t('roster.reissue'))}</button>
+       <p class="quiet msg">${esc(
+         unused.length === 1
+           ? t('roster.reissue_one')
+           : t('roster.reissue_many', { count: unused.length }),
+       )} ${esc(t('roster.reissue_note'))}</p>`
     : '';
   if (unused.length) $('reissue').addEventListener('click', () => void reissueUnused(unused));
 
@@ -409,9 +464,14 @@ const stateLabel = (state) => (STATE_KEYS[state] ? t(STATE_KEYS[state]) : state)
 
 async function reslipStudent(id) {
   const student = roster.find((s) => s.id === id);
-  if (!confirm(t('roster.reslip_student_confirm', { name: student.displayName }))) return;
+  const go = await ask({
+    title: t('roster.reslip'),
+    body: t('roster.reslip_student_confirm', { name: student.displayName }),
+    confirmLabel: t('roster.reslip'),
+  });
+  if (!go) return;
   const [created, error] = await send(`/api/students/${id}/password`, json());
-  if (error) return alert(error);
+  if (error) return void showError(error);
   await loadRoster();
   showSlips([created], t('roster.slips_reslip_student', { name: student.displayName }));
 }
@@ -431,7 +491,12 @@ async function reslipStudent(id) {
  * button just re-slipped.
  */
 async function reissueUnused(unused) {
-  if (!confirm(t('roster.reissue_confirm', { count: unused.length }))) return;
+  const go = await ask({
+    title: t('roster.reissue'),
+    body: t('roster.reissue_confirm', { count: unused.length }),
+    confirmLabel: t('roster.reissue'),
+  });
+  if (!go) return;
 
   const button = $('reissue');
   button.disabled = true;
@@ -450,22 +515,33 @@ async function reissueUnused(unused) {
 
   await loadRoster();
   if (created.length) showSlips(created, t('roster.slips_reissued'));
-  if (failure) alert(t('roster.reissue_aborted', { failure }));
+  if (failure) {
+    await alertDialog({
+      title: t('roster.reissue'),
+      body: t('roster.reissue_aborted', { failure }),
+      okLabel: t('common.close'),
+    });
+  }
 }
 
 async function toggleState(id) {
   const student = roster.find((s) => s.id === id);
   const state = student.state === 'active' ? 'archived' : 'active';
   const [, error] = await send(`/api/students/${id}/state`, json({ state }, 'PATCH'));
-  if (error) return alert(error);
+  if (error) return void showError(error);
   await loadRoster();
 }
 
 async function removeMember(id) {
   const student = roster.find((s) => s.id === id);
-  if (!confirm(t('roster.remove_confirm', { name: student.displayName }))) return;
+  const go = await ask({
+    title: t('roster.remove'),
+    body: t('roster.remove_confirm', { name: student.displayName }),
+    confirmLabel: t('roster.remove'),
+  });
+  if (!go) return;
   const [, error] = await send(`/api/classes/${selected}/members/${id}`, json(undefined, 'DELETE'));
-  if (error) return alert(error);
+  if (error) return void showError(error);
   await loadClasses();
   await loadRoster();
 }
@@ -485,14 +561,29 @@ async function removeMember(id) {
  */
 async function coldStore(id) {
   const student = roster.find((s) => s.id === id);
-  if (!confirm(t('roster.cold_confirm', { name: student.displayName }))) return;
+  const go = await ask({
+    title: t('roster.cold'),
+    body: t('roster.cold_confirm', { name: student.displayName }),
+    confirmLabel: t('roster.cold'),
+  });
+  if (!go) return;
   const [payload, error] = await send(`/api/students/${id}/state`, json({ state: 'cold' }, 'PATCH'));
-  if (error) return alert(error);
+  if (error) return void showError(error);
   // The dump is the whole operation, so a provisioning failure here is not a
   // detail: the row now says `cold` while the schema is still on disk, and it
   // is `reconcile.ts` rather than this page that will finish it.
+  //
+  // Awaited, because `confirm()`'s replacement does not block the way `alert()`
+  // did: without it the list below re-renders underneath the open dialog.
   if (payload?.provisioning && payload.provisioning.ok === false) {
-    alert(t('roster.cold_incomplete', { name: student.displayName, error: payload.provisioning.error ?? '' }));
+    await alertDialog({
+      title: t('roster.cold'),
+      body: t('roster.cold_incomplete', {
+        name: student.displayName,
+        error: payload.provisioning.error ?? '',
+      }),
+      okLabel: t('common.close'),
+    });
   }
   await loadRoster();
 }
@@ -519,35 +610,44 @@ async function coldStore(id) {
  */
 async function deleteStudent(id) {
   const student = roster.find((s) => s.id === id);
-  if (!confirm(t('roster.delete_confirm', { name: student.displayName }))) return;
-  if (
-    !confirm(
-      t('roster.delete_confirm_final', {
-        name: student.displayName,
-        username: student.username,
-      }),
-    )
-  ) {
-    return;
-  }
+  const go = await ask({
+    title: t('roster.delete'),
+    body: t('roster.delete_confirm', { name: student.displayName }),
+    confirmLabel: t('roster.delete'),
+  });
+  if (!go) return;
+  // The second heading is not the first one again: two dialogs headed "Löschen"
+  // would read as one dialog shown twice, which is the failure the two steps
+  // exist to avoid.
+  const sure = await ask({
+    title: t('roster.delete_final'),
+    body: t('roster.delete_confirm_final', {
+      name: student.displayName,
+      username: student.username,
+    }),
+    confirmLabel: t('common.delete'),
+  });
+  if (!sure) return;
 
   const [payload, error] = await send(
     `/api/students/${id}/state`,
     json({ state: 'deleted' }, 'PATCH'),
   );
-  if (error) return alert(error);
+  if (error) return void showError(error);
 
   // `provisioning.ok === false` is the case worth telling the truth about: the
   // account row is `deleted` and the student has vanished from this list, but
   // the dump failed and so the drop was skipped — their schema is still there.
   // Saying nothing would leave a teacher believing the disk was freed.
   if (payload?.provisioning && payload.provisioning.ok === false) {
-    alert(
-      t('roster.delete_incomplete', {
+    await alertDialog({
+      title: t('roster.delete'),
+      body: t('roster.delete_incomplete', {
         name: student.displayName,
         error: payload.provisioning.error ?? '',
       }),
-    );
+      okLabel: t('common.close'),
+    });
   }
   await loadClasses();
   await loadRoster();
@@ -599,14 +699,27 @@ $('order').addEventListener('change', renderPreview);
 $('s-create').addEventListener('click', async () => {
   const students = parseNames($('paste').value, $('order').value);
   if (students.some((p) => p.firstName === '')) {
-    return alert(t('roster.no_first_name'));
+    return void alertDialog({
+      title: t('roster.add_students'),
+      body: t('roster.no_first_name'),
+      okLabel: t('common.close'),
+    });
   }
-  if (!confirm(t('roster.create_confirm', { count: students.length }))) return;
+  // Not `danger`: this asks because the slips appear exactly once and the
+  // usernames are permanent, not because anything is destroyed. A red "Anlegen"
+  // would spend the colour that has to still mean something on "Löschen".
+  const go = await ask({
+    title: t('roster.add_students'),
+    body: t('roster.create_confirm', { count: students.length }),
+    confirmLabel: t('common.create'),
+    danger: false,
+  });
+  if (!go) return;
 
   $('s-create').disabled = true;
   const [payload, error] = await send(`/api/classes/${selected}/students`, json({ students }));
   $('s-create').disabled = false;
-  if (error) return alert(error);
+  if (error) return void showError(error);
 
   $('paste').value = '';
   renderPreview();
@@ -618,8 +731,17 @@ $('s-create').addEventListener('click', async () => {
 // --- chrome ------------------------------------------------------------------
 
 $('print').addEventListener('click', () => print());
-$('slips-done').addEventListener('click', () => {
-  if (confirm(t('roster.close_confirm'))) closeSlips();
+$('slips-done').addEventListener('click', async () => {
+  // Not `danger`: what is at stake is a view, not data — the passwords stay
+  // valid, they just stop being readable. Red would say the opposite of what
+  // the sentence says.
+  const go = await ask({
+    title: t('common.close'),
+    body: t('roster.close_confirm'),
+    confirmLabel: t('common.close'),
+    danger: false,
+  });
+  if (go) closeSlips();
 });
 $('lesson').addEventListener('click', () => (location.href = '/lesson'));
 $('exercises').addEventListener('click', () => (location.href = '/uebungen'));

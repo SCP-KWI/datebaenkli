@@ -2,8 +2,19 @@
 
 Running state document. Update it at the end of every working session.
 
-**Last updated:** 2026-08-07 (evening) · **Phases 0–9 are DEPLOYED**, on
-`0.9.0`. The repo and the server are in step; there is no undeployed code.
+**Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the
+server serves `0.10.0` and the repo is on **`0.10.1`, which is not deployed** —
+it is §11, the usability pass, and it is the only undeployed code.
+
+**The demo is ON in production, and §9 still says it shipped dark.** Curled
+today: `/api/demo` answers `{"enabled":true,"leaseMinutes":30}` and `builtAt` is
+`2026-08-09T14:26:06Z`, so the box was rebuilt after the deploy §7 describes and
+`DBK_DEMO_ENABLED` was set at some point on the way. The usability study §11
+works from found the two demo buttons on the live login page and used them,
+which is the same fact from the other side. **§9's "shipped dark" paragraph is
+stale** — it is left in place rather than rewritten, because who turned it on
+and when is not something this file can honestly claim; what is settled is the
+curl. Believe the curl.
 
 **Two corrections to what this file used to say at the top.** It claimed `0.8.0`
 and "no undeployed code" from 2026-07-30 until today, and both were wrong from
@@ -4350,10 +4361,19 @@ The driver's real message is in the app log — `grep 'could not get a connectio
 
 ## 8. Next session should
 
-**Phase 10 — the public demo — is DEPLOYED and DARK** (2026-08-09). Production
-serves `0.10.0`; `DBK_DEMO_ENABLED` is unset, so the feature is inert. §9m is
-the four-step enable, §9k the two open questions (pool size, and whether to link
-it anywhere public — they are the same question).
+**Deploy `0.10.1` — the usability pass, §11.** It is the only undeployed code
+and it is entirely front-end. §7's runbook applies unchanged, and the one thing
+to actually check afterwards is that a destructive button still destroys: §11b
+is a bug that made every one of them dead and was invisible to the whole unit
+suite. Run the live suites and both verify scripts as part of it — §11d says why
+they were skipped and why that is an argument rather than a run.
+
+**Phase 10 — the public demo — is DEPLOYED and it is ON.** This paragraph said
+"DARK" until 2026-08-09 and was already wrong when it was read: `/api/demo`
+answers `enabled: true` on production. §9k's two open questions are therefore
+live rather than hypothetical — pool size is 8 students and 3 teachers, and
+whoever knows the URL can take a slot. §9m is the enable procedure, for reference
+rather than as a to-do.
 
 **Three operational items the deploy turned up, none of them code:**
 
@@ -4903,3 +4923,133 @@ and the boot log line is how to verify it.
   config value so it can move.
 - **Whether the demo is linked from anywhere public**, and therefore what load to
   expect. Until it is linked, the exposure is whoever is told the URL.
+
+---
+
+## 11. The usability pass — 0.10.1 (2026-08-09, NOT DEPLOYED)
+
+An external usability and error test was run against the deployed `0.10.0`,
+entirely through the two demo buttons: teacher and student, every screen, DE and
+EN, dark mode, console and network logs read throughout. It found four bugs and
+eleven smaller things, and it is the first time anyone but the author has used
+this app end to end. **Every item in it is fixed in `0.10.1`.** What follows is
+what was wrong and what the fix cost — the report itself is not in the repo.
+
+Nothing server-side changed. This is `src/web` plus `app.css`, one new pair of
+exports in `util.js`, five HTML files, both catalogues and one new test file.
+
+### 11a. The one that could lose a teacher's work
+
+**Writing the task text first and adding a table second lost the text.** Every
+action in the lower half of the exercise editor ends in `openExercise()`, which
+refetches and repaints — and the repaint rendered `open`, so whatever was typed
+into the title and the task box was replaced by what the server still held. No
+warning, no autosave, and the natural authoring order is exactly the one that
+triggers it.
+
+The fix is a `draft` in `uebungen.js`: captured off the live DOM *before* any
+repaint, rendered in place of the saved values while it exists, and carrying the
+exercise's id so it cannot be applied to a different exercise. Switching
+exercises with unsaved text asks first; `beforeunload` covers the tab.
+
+**It is deliberately not autosave.** The two save models on that screen are both
+right — a `<textarea>` that saved per keystroke would write a row per character
+— and what was missing was any statement that a Speichern was owed. That is now
+a sticky bar at the foot of the pane, which also answers the report's other
+complaint about this screen: the only Speichern was at the top of a page long
+enough to scroll, so a teacher who went down to add tables had to go back up to
+save.
+
+### 11b. `confirmDialog` and `alertDialog`, and the bug found while testing them
+
+Every question this app asked about destroying something was `window.confirm`,
+while every question it asked to *collect* something was a styled `<dialog>` —
+backwards, and the report said so about "Datenbank zurücksetzen" specifically.
+`util.js` now exports the two replacements and **all 16 confirms and 15 alerts
+across `sql.js`, `uebungen.js` and `roster.js` go through them**. The catalogue
+was not rewritten: the existing `*_confirm` strings are passed as the dialog's
+`body` (`white-space: pre-line` renders the `\n\n` they were written with) and
+the heading is the action's own short label.
+
+**Two bugs in that helper, both found by driving a real browser rather than by
+reading it.** The first: `dialog.close()` does not touch `returnValue`, so
+Escape leaves whatever the *last* dialog set — confirm a delete, dismiss the
+next question with Escape, and it reads back as a yes. The second: the answer
+was routed through the `close` event, and in the browser used for testing that
+event never fired at all, so every converted button silently did nothing. The
+buttons now resolve the promise themselves and `close` is the backup for Escape
+and the backdrop. A promise cannot resolve twice, so the two cannot disagree.
+
+Neither would have been caught by the unit suite, and the second would have
+shipped as *every destructive control in the app being dead*.
+
+### 11c. The rest, in one list
+
+- **`throw new Error('redirecting')` was an uncaught exception on every correct
+  redirect** (`sql.js`, `lesson.js`). Both now `await new Promise(() => {})`,
+  which stops the module without shouting. The console is where a real fault has
+  to be visible, and a page that logs on its normal path spends that.
+- **The storage line read "0.0 MB" for a schema with tables in it.** `mb()` now
+  switches to whole kB below a megabyte. `test/util.test.mjs` is new and covers
+  the boundary — it is the one thing in this pass that is pure, reachable by a
+  test, and printed on two screens that are supposed to agree (§8.6).
+- **`/sql` had a different top bar from every other page**: "Lektion" and
+  "Klassen" were missing exactly where a teacher mid-lesson wants them. They are
+  there now, revealed by role the way `home.js` does it, and the page's own two
+  actions moved behind a `.topbar-sep` divider — "Datenbank zurücksetzen" was
+  flush against "CSV importieren", same size, told apart by red text alone.
+- **The demo bar covered content.** It is `position: fixed` bottom-left, and on
+  `/sql` it sat over the last rows of the schema tree. `util.js` now sets
+  `has-demo` on `<body>` and the stylesheet reserves the strip — on `<body>`
+  everywhere, on `#browser` for `/sql`, where body padding would push the footer
+  off a `100dvh` grid. A real account's pages are unchanged to the pixel.
+- **Row reordering offered only "↑".** Both arrows now, each disabled at its end.
+- **The "?" gave no feedback** — it opens a new tab and looked like a dead
+  control. `.help-link` adds a `↗` in generated content (a glyph, not an icon:
+  the icon font is subsetted and adding one means a network re-fetch), and the
+  `aria-label`/`title` say "neues Fenster" on all five pages that carry it.
+- **"Neue Zettel für 3 Lernende ohne erste Anmeldung" was a sentence used as a
+  button.** It is `roster.reissue` ("Neue Zettel ausstellen") with the count and
+  the caveat as helper text below.
+- **"Passwort ändern" was offered to demo sessions**, whose account is thrown
+  away in half an hour. Hidden on `me.demo`.
+- **The handbook said "Stand: Juli 2026 · Version 0.8.1".** It now says August
+  2026 / 0.10.1, gained a section on the demo (§3), and lost the two statements
+  phase 9 had falsified — §1's "es gibt keine Übungen … keine Abgaben" and the
+  FAQ's "Wo sind die Aufgaben? Es gibt keine." Edited in
+  `docs/handbook-src/handbuch.src.html` and rebuilt with `node build.mjs`, which
+  needs neither network nor a running app; `refresh.sh` (screenshots) was not
+  run, so **`{{FIG:login}}` still predates the demo buttons** and chapter 10 has
+  no figures at all.
+
+### 11d. What is verified, and what is not
+
+Verified against a throwaway cluster with the demo pool created, driving a real
+browser as a demo teacher, a demo student and a real admin: the draft surviving
+a table add, the switch-away question, both arrows, the confirm dialog on the
+source delete and on the workspace reset (including that cancelling does
+nothing), the two-step student delete, the reissue control, the `/sql` top bar
+for both roles, the reserved demo strip, `520 kB` where `0.5 MB` used to be, and
+that a real account has no demo bar, no reserved padding and keeps its "Passwort
+ändern". The student → `/lesson` redirect was re-run with the console open: no
+exception.
+
+**330 unit tests pass** (`npm test`, 422 with the live suites skipped),
+typecheck clean.
+
+**Not run:** the live suites, `verify-isolation.sh` and `verify-auth.sh`. No
+server code, no auth and no provisioning changed in this pass — but that is an
+argument, not a run, and the deploy should include them.
+
+**Not tested by anyone, still:** mobile and responsive layout, which the report
+also could not check. The demo bar's `max-width: 560px` rule and the new sticky
+save bar are both untested on a phone.
+
+### 11e. Two things the report raised that were deliberately not changed
+
+- **"Beenden" ends a demo with no confirmation.** The report flagged it as
+  correct-but-worth-noting, and it is correct: the login page says the data is
+  discarded, and a confirmation on the one control whose whole purpose is to
+  leave would be friction for nothing.
+- **The demo pool's session is 30 minutes and the countdown is a bar, not a
+  modal.** Untouched; §9g has the argument.

@@ -59,8 +59,19 @@ export const ticked = (text) => esc(text).replace(/`([^`]+)`/g, '<code>$1</code>
  * point for the decimal separator, so the locale-aware version formats
  * identically — and this is called from render paths that run before `/api/me`
  * has answered, where `formats()` would pin the cached locale.
+ *
+ * **Below a megabyte it switches to kB, and the name is now a small lie.** A
+ * usability pass found the line reading "0.0 MB von 50.0 MB" after a student
+ * had made tables and inserted rows — true to one decimal, and useless: the one
+ * reading it cannot tell a working meter from a broken one. A whole lesson fits
+ * inside the rounding error of this figure's old form, so the case that needs
+ * the precision is the ordinary one. The unit is part of the string precisely
+ * so this switch is possible without every call site knowing.
  */
-export const mb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+export const mb = (bytes) =>
+  bytes < 1024 * 1024
+    ? `${Math.round(bytes / 1024)} kB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 /**
  * The method is a parameter because PATCH and DELETE need the header for the
@@ -168,6 +179,112 @@ export async function mountVersion(element, formatDate) {
 }
 
 /**
+ * The app's confirmation dialog, in place of `window.confirm`.
+ *
+ * Every other question this app asks is a `<dialog>` — the CSV import, the SQL
+ * script, a hand-in — and the destructive ones were the browser's grey box.
+ * That is backwards: the dialogs that only collect input looked like the app,
+ * and the ones that destroy a schema looked like a page from 2004. Native
+ * `confirm()` also cannot be translated beyond its message, cannot mark its
+ * dangerous button as dangerous, and blocks the event loop while it is open.
+ *
+ * **The element is built here, not put in seven pages' markup.** Same argument
+ * as `mountDemoBanner` below: it belongs to no page, and a copy per page is six
+ * copies to keep in step — which is exactly what `test/pages.test.mjs` exists
+ * to police for the one block that genuinely has to be duplicated.
+ *
+ * `body` is optional and is the second sentence: the callers that ask twice use
+ * it to state what does not survive rather than repeating the question.
+ * **Both are `textContent`** — no caller may pass markup, and none needs to.
+ *
+ * Returns a promise for `true`/`false`, so a caller reads exactly as it did
+ * with `confirm()` bar an `await`.
+ *
+ * **The two buttons resolve it themselves, and the `close` event is the backup
+ * rather than the mechanism.** Routing a click through `close` → `returnValue`
+ * → a listener is three steps to carry an answer the handler already had, and
+ * every one of them is a way for the button to do nothing at all — which is what
+ * it did in a browser that never dispatched the event. Escape and the backdrop
+ * have no handler to speak from, so they still come through `close`; a promise
+ * cannot resolve twice, so the two paths cannot disagree.
+ */
+let confirmBox = null;
+
+export function confirmDialog({ title, body = '', confirmLabel, cancelLabel, danger = true }) {
+  if (!confirmBox) {
+    confirmBox = document.createElement('dialog');
+    confirmBox.className = 'confirm-dialog';
+    confirmBox.innerHTML =
+      '<h2></h2><p class="confirm-body"></p>' +
+      '<menu><button data-no></button><button data-yes></button></menu>';
+    document.body.append(confirmBox);
+  }
+
+  const heading = confirmBox.querySelector('h2');
+  const text = confirmBox.querySelector('.confirm-body');
+  const no = confirmBox.querySelector('[data-no]');
+  const yes = confirmBox.querySelector('[data-yes]');
+
+  heading.textContent = title;
+  text.textContent = body;
+  text.hidden = !body;
+  no.textContent = cancelLabel;
+  // Every field is reassigned on every call, including the ones that look like
+  // they could be left alone: the box is one element reused for the life of the
+  // page, so `alertDialog` hiding the cancel button would otherwise hide it for
+  // the next *question* too — a confirm with no way to say no.
+  no.hidden = false;
+  yes.textContent = confirmLabel;
+  yes.className = danger ? 'btn-danger' : 'primary';
+
+  // **Cleared before every opening, and this is not defensive coding.** Escape
+  // closes a `<dialog>` without touching `returnValue`, so it keeps whatever the
+  // last dialog set — meaning "confirm a delete, then dismiss the next question
+  // with Escape" would read back as a yes and run the destructive path. The one
+  // failure mode this whole helper exists to prevent.
+  confirmBox.returnValue = '';
+
+  return new Promise((resolve) => {
+    no.onclick = () => {
+      confirmBox.close('no');
+      resolve(false);
+    };
+    yes.onclick = () => {
+      confirmBox.close('yes');
+      resolve(true);
+    };
+    // Escape and the backdrop only. `once` matters: the box outlives every
+    // question asked through it, so a listener left behind would answer the
+    // next one from the last one's promise.
+    confirmBox.addEventListener('close', () => resolve(confirmBox.returnValue === 'yes'), {
+      once: true,
+    });
+    confirmBox.showModal();
+    // The cancel button, not the dangerous one: a teacher who hits Enter out of
+    // habit must not thereby drop a class's work.
+    no.focus();
+  });
+}
+
+/**
+ * The same box with one button — `window.alert`'s replacement.
+ *
+ * Here rather than left as `alert()` because the two appear side by side in
+ * `roster.js`: every failure path there reports through one and every question
+ * asks through the other, and a page that answers half its own questions in its
+ * own styling and half in the browser's looks broken rather than plain.
+ *
+ * Not `danger`: an alert is the report of something that already happened, and
+ * a red button offers a choice that no longer exists.
+ */
+export function alertDialog({ title, body = '', okLabel }) {
+  const promise = confirmDialog({ title, body, confirmLabel: okLabel, cancelLabel: '', danger: false });
+  confirmBox.querySelector('[data-no]').hidden = true;
+  confirmBox.querySelector('[data-yes]').focus();
+  return promise.then(() => undefined);
+}
+
+/**
  * The demo countdown (phase 10, HANDOFF §9g).
  *
  * A demo session stops after 30 minutes whether or not anyone is typing, and
@@ -184,6 +301,13 @@ export async function mountVersion(element, formatDate) {
  */
 export function mountDemoBanner(demo, t) {
   if (!demo) return;
+
+  // The stylesheet keys off this: the bar is `position: fixed`, so on a page
+  // with a tall left-hand list (the schema tree, a roster) it sat *on top* of
+  // the last two rows. Reserving the strip is the honest fix — a floating
+  // element that covers content is a bug in every mode, and nudging it up only
+  // moves which rows it covers. `app.css`'s `.demo-bar` block has the rest.
+  document.body.classList.add('has-demo');
 
   const bar = document.createElement('div');
   bar.className = 'demo-bar';

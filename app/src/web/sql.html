@@ -23,15 +23,37 @@
       </a>
       <span class="who" id="who"></span>
       <nav class="topbar-actions">
+        <!--
+          The section links first, and the same set as every other page's.
+
+          They used not to be: this page showed "Übungen" and "Übersicht" only,
+          and put its own two actions where "Lektion" and "Klassen" are
+          everywhere else. A usability pass caught what that costs — a teacher
+          working in their own sandbox mid-lesson is one click from the live
+          class view on five pages and no clicks from it on the one page they
+          are actually on. `sql.js` reveals the two staff entries by role, the
+          way `home.js` and `uebungen.html` already do.
+        -->
+        <button id="exercises" data-i18n="nav.exercises">Übungen</button>
+        <button id="lesson" hidden data-i18n="nav.lesson">Lektion</button>
+        <button id="roster" hidden data-i18n="nav.roster">Klassen</button>
+        <button id="overview" data-i18n="nav.overview">Übersicht</button>
+        <!--
+          This page's own actions, after a divider. The divider is not
+          decoration: "Datenbank zurücksetzen" drops every table this account
+          owns and it used to sit flush against "CSV importieren", same size and
+          same shape, told apart by red text alone. One slip of the mouse
+          between a routine action and an irreversible one is not a risk worth
+          keeping for 8 px.
+
+          Both are hidden while an exercise is open, and `sql.js`'s exercise
+          section says why: "reset my database" would take the exercise with it,
+          and an import goes to the playground schema rather than to the one on
+          screen. The exercise bar carries the narrow versions of both.
+        -->
+        <span class="topbar-sep" aria-hidden="true"></span>
         <button id="import" data-i18n="sql.import">CSV importieren</button>
         <button id="reset" class="btn-danger" data-i18n="sql.reset">Datenbank zurücksetzen</button>
-        <!-- Both of the above are hidden while an exercise is open, and
-             `sql.js`'s exercise section says why: "reset my database" would take
-             the exercise with it, and an import goes to the playground schema
-             rather than to the one on screen. The exercise bar carries the
-             narrow versions of both. -->
-        <button id="exercises" data-i18n="nav.exercises">Übungen</button>
-        <button id="overview" data-i18n="nav.overview">Übersicht</button>
         <select id="lang" class="lang-select" aria-label="Sprache / Language">
           <option value="de">Deutsch</option>
           <option value="en">English</option>

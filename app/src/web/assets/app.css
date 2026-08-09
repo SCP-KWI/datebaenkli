@@ -203,6 +203,18 @@ samp {
   flex-wrap: wrap;
 }
 
+/* Between "go somewhere else" and "do something here" — currently only on
+   `/sql`, where the something is a `DROP SCHEMA`. A hairline plus the gap on
+   either side of it, so the destructive button is not adjacent to a harmless
+   one by accident. `aria-hidden` in the markup: it is a visual grouping and
+   there is nothing for a screen reader to read out. */
+.topbar-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.25rem 0.35rem;
+  background: var(--line-strong);
+}
+
 /* ---------------------------------------------------------------------------
    Buttons — Chalk §7
    --------------------------------------------------------------------------- */
@@ -319,6 +331,33 @@ button[disabled]:hover {
    is an element selector, so `var(--ink)` already wins. */
 a.icon-btn:hover {
   text-decoration: none;
+}
+
+/* The handbook opens in a new tab, and a bare `?` does not say so. A usability
+   pass reported the click as doing nothing at all — which is exactly what it
+   looks like when the new tab opens behind the current one, or when a tab strip
+   is already too full to notice one more.
+
+   A glyph rather than an icon-font name: `assets/fonts.css` ships a *subsetted*
+   Material Symbols face, so any icon used here has to be added to `ICONS` in
+   `app/tools/vendor-fonts.mjs` and the font re-fetched from Google. That is a
+   build step with a network dependency, for one arrow. `↗` is in the text face.
+
+   Generated content rather than a `<span>` in the markup: `aria-label` on the
+   link is what a screen reader reads, and it now says in words that a new
+   window opens — so the arrow is for the eye only and has no business being an
+   element that could be read out twice. */
+.help-link {
+  position: relative;
+}
+.help-link::after {
+  content: '↗';
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--muted);
 }
 
 /* ---------------------------------------------------------------------------
@@ -698,6 +737,27 @@ dialog::backdrop {
   backdrop-filter: blur(2px);
 }
 
+/* `confirmDialog()` in `util.js` — the app's answer to `window.confirm`.
+   Narrower than the form dialogs above: it holds two sentences and two buttons,
+   and at 52rem a one-line question sits in the middle of a lot of nothing. */
+.confirm-dialog {
+  max-width: min(32rem, 92vw);
+}
+.confirm-dialog h2 {
+  margin: 0 0 0.5rem;
+  font-size: 17px;
+}
+.confirm-dialog .confirm-body {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  /* The catalogue's confirmation texts separate their paragraphs with `\n\n`,
+     written for `window.confirm`. They are still `textContent` here — this is
+     what renders those breaks without anyone having to turn a translated string
+     into markup. */
+  white-space: pre-line;
+}
+
 /* The demo countdown (phase 10), and the login page's demo buttons.
 
    Shared rather than page-scoped because the banner is mounted by `util.js`
@@ -729,6 +789,26 @@ dialog::backdrop {
 .demo-bar .btn {
   padding: 0.2rem 0.6rem;
   font-size: 0.85rem;
+}
+/* The strip the bar occupies, taken out of the page rather than floated over
+   it. `util.js` sets `has-demo` when it mounts the bar, so the space is only
+   reserved on the sessions that have one — a real account's pages are unchanged
+   to the pixel.
+
+   Found by a usability pass: on `/sql` the bar covered the last rows of the
+   schema tree, and on `/roster` the end of a class list. A `position: fixed`
+   element over scrollable content hides the same amount of it wherever it is
+   put, so "nudge it up" would only have moved which rows were unreadable.
+
+   Two rules because the pages disagree about who scrolls: everywhere but `/sql`
+   the document does, and padding on `<body>` is the whole answer; `/sql` is a
+   `100dvh` grid where body padding would push the footer off the screen, so the
+   space goes on the pane that actually reaches the corner. */
+body.has-demo:not([data-page='sql']) {
+  padding-bottom: 4rem;
+}
+body.has-demo[data-page='sql'] #browser {
+  padding-bottom: 4rem;
 }
 @media (max-width: 560px) {
   /* Full width at the bottom rather than a floating pill: on a phone the pill
@@ -1516,6 +1596,37 @@ body[data-page='exercises'] > .footer {
 }
 .ex-detail-head {
   gap: 0.5rem;
+}
+
+/* "Ungespeicherte Änderungen", with the second Speichern beside it.
+
+   Sticky rather than fixed: it belongs to the detail pane, so it must not
+   float over the student's list on the same page, and `position: sticky`
+   inside a flex column pins it to the bottom of the viewport for exactly as
+   long as the pane it belongs to is on screen. It is the last child of
+   `#detail`, so nothing below it can be covered.
+
+   `hidden` when there is nothing to save — this bar is a statement of fact, and
+   one that is always there is one nobody reads. `[hidden]` is `!important` at
+   the top of this file, so the `display` here cannot resurrect it. */
+.ex-unsaved {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.9rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+}
+.ex-unsaved span {
+  margin-right: auto;
+  color: var(--muted);
 }
 
 /* The task editor beside its live preview. Below 900px they stack, because a

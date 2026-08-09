@@ -20,7 +20,16 @@ import { createEditor } from '/assets/editor.js';
 import { hintFor, renderHint } from '/assets/hints.js';
 import { apply, errorText, formats, load, paintCached, t, wireLanguageSelect } from '/assets/i18n.js';
 import { renderMarkdown } from '/assets/markdown.js';
-import { esc, json, mb, mountDemoBanner, mountVersion, ticked, wireThemeToggle } from '/assets/util.js';
+import {
+  confirmDialog,
+  esc,
+  json,
+  mb,
+  mountDemoBanner,
+  mountVersion,
+  ticked,
+  wireThemeToggle,
+} from '/assets/util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -85,12 +94,29 @@ if (!me) {
   location.href = '/';
 }
 // Nothing below is worth running while the browser is on its way elsewhere.
+//
+// A promise that never settles, not `throw`. Both stop the module, but a throw
+// is an *uncaught exception* — logged in red on every legitimate redirect, and
+// posted to whatever error reporting a deployment has. A usability pass filed it
+// as a bug, which is the correct reading: the console is where a real fault is
+// supposed to be visible, and a page that shouts on its normal path is a page
+// whose console no longer means anything. The document is being replaced, so
+// nothing is leaked by never resuming here.
 if (!me || me.user.mustChangePassword || me.user.role === 'admin') {
-  throw new Error('redirecting');
+  await new Promise(() => {});
 }
 
 const user = me.user;
 $('who').textContent = `${user.displayName} · ${user.username}`;
+
+// The two staff entries in the top bar, which ship `hidden` so that a student
+// never sees a flash of them. Same test as `home.js` uses for the same two
+// buttons — "not a student" rather than "a teacher", because an admin reaches
+// both pages too. An admin never gets this far (they are redirected above), so
+// the line is about students only, and saying it the same way as the other page
+// is worth more than saying it shorter.
+$('lesson').hidden = user.role === 'student';
+$('roster').hidden = user.role === 'student';
 
 // --- language ----------------------------------------------------------------
 
@@ -259,7 +285,13 @@ async function mountExercise() {
 }
 
 async function resetExercise() {
-  if (!confirm(t('ex.reset_confirm', { title: exercise.title }))) return;
+  const yes = await confirmDialog({
+    title: t('ex.reset_tables'),
+    body: t('ex.reset_confirm', { title: exercise.title }),
+    confirmLabel: t('ex.reset_tables'),
+    cancelLabel: t('common.cancel'),
+  });
+  if (!yes) return;
   $('exReset').disabled = true;
   exStatus(t('ex.resetting'));
   try {
@@ -601,7 +633,17 @@ async function cancel() {
 }
 
 async function reset() {
-  const confirmed = confirm(t('sql.reset_confirm'));
+  // `confirmDialog`, not `window.confirm`. The rest of this page asks its
+  // questions in a `<dialog>` — the CSV import, the hand-in — and the one
+  // control that drops every table the student owns was the browser's grey box:
+  // untranslatable past its message, unable to mark its own dangerous button,
+  // and blocking the event loop while it is open. `util.js` has the argument.
+  const confirmed = await confirmDialog({
+    title: t('sql.reset'),
+    body: t('sql.reset_confirm'),
+    confirmLabel: t('sql.reset'),
+    cancelLabel: t('common.cancel'),
+  });
   if (!confirmed) return;
 
   $('reset').disabled = true;
@@ -663,6 +705,8 @@ async function importCsv() {
 // needs `script-src 'unsafe-inline'`, and this was the last one in the app.
 $('overview').onclick = () => (location.href = '/');
 $('exercises').onclick = () => (location.href = '/uebungen');
+$('lesson').onclick = () => (location.href = '/lesson');
+$('roster').onclick = () => (location.href = '/roster');
 $('run').onclick = () => void run();
 $('cancel').onclick = () => void cancel();
 $('reset').onclick = () => void reset();
