@@ -4715,6 +4715,29 @@ is `app_user.demo`.
    that a reset actually drops workspaces, and that two demo visitors cannot read
    each other. The live suite takes the advisory lock like every other one.
 
+### 9l. What the pre-flight caught, 2026-08-09
+
+§7's phase-9 subsection says to `git diff` `config.ts` against `.env.example`
+and `docker-compose.yml` *before* the pull rather than discovering it at boot.
+Doing that caught a blocker and a pre-existing bug.
+
+**The blocker: compose passes only what its `environment` block names.** The
+four `DBK_DEMO_*` variables were in `config.ts` and in nothing else, so
+`DBK_DEMO_ENABLED=true` in the server's `.env` would have been read by nobody
+and the feature would have been un-turn-on-able — with no error anywhere, since
+`false` is a valid value. Fixed: all four are in compose now, defaulted to the
+same values `config.ts` uses.
+
+**The pre-existing one, NOT fixed:** `DBK_ARCHIVE_AFTER_DAYS`,
+`DBK_ARCHIVE_SWEEP`, `DBK_ARCHIVE_SWEEP_HOUR` and `DBK_ARCHIVE_SWEEP_MINUTE` are
+documented in `.env.example` and are *also* absent from the compose block, so
+the nightly sweep has always run on its defaults regardless of what the server's
+`.env` says. That has been true since 5b. It is left alone deliberately —
+adding the passthrough silently changes when a job that archives accounts in
+bulk fires, and that is not a change to make as a side effect of shipping a
+demo. `.env.example` now says so at the site. Fixing it is a change of its own,
+and the boot log line is how to verify it.
+
 ### 9k. Open questions, to be answered before it is deployed
 
 - **Pool size.** Starts at 8 students and 3 teachers, which is a guess. It is a

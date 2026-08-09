@@ -163,6 +163,18 @@ services:
       # exists, and still throws if there is no admin AND no password, which is
       # the only case where an empty value is actually dangerous.
       DBK_BOOTSTRAP_ADMIN_PASSWORD: ${DBK_BOOTSTRAP_ADMIN_PASSWORD:-}
+      # The public demo (phase 10, HANDOFF §9). Off unless this says "true", and
+      # even then the pool does not exist until an admin POSTs
+      # /api/admin/demo/ensure — turning this on is two deliberate acts, not one.
+      #
+      # These four have to be listed here or they do not exist as far as the
+      # container is concerned: compose passes only what this block names, so a
+      # value set in .env and not repeated here is read by nobody. That is not
+      # hypothetical — see the note under DBK_ARCHIVE_AFTER_DAYS in .env.example.
+      DBK_DEMO_ENABLED: ${DBK_DEMO_ENABLED:-false}
+      DBK_DEMO_STUDENTS: ${DBK_DEMO_STUDENTS:-8}
+      DBK_DEMO_TEACHERS: ${DBK_DEMO_TEACHERS:-3}
+      DBK_DEMO_LEASE_MINUTES: ${DBK_DEMO_LEASE_MINUTES:-30}
     volumes:
       # dumps live on bulk storage rather than the fast root disk — see §7
       #
