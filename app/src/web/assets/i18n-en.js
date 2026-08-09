@@ -295,6 +295,8 @@ export default {
   'password.next': 'New password',
   'password.repeat': 'Repeat the new password',
   'password.save': 'Save',
+  'password.show': 'Show password',
+  'password.hide': 'Hide password',
   'password.mismatch': 'The two new passwords are not the same.',
   'password.failed': 'The change did not work.',
 
@@ -627,4 +629,41 @@ export default {
   'error.demo_not_allowed': 'A demo account cannot do that. Everything else works normally.',
   'error.demo_disabled': 'The demo is not enabled on this installation.',
   'error.too_many_requests': 'Too many requests. Wait a moment.',
+
+  // --- the first-run tour (0.11.0) ------------------------------------------
+  // See the German for why the two sets are not translations of one another.
+  'tour.step': 'Step {n} of {total}',
+  'tour.next': 'Next',
+  'tour.done': 'Done',
+  'tour.skip': 'Skip',
+  'tour.again': 'Show the tour again',
+
+  'tour.t.roster':
+    'Start here: create a class, paste your name list, print the credential ' +
+    'slips. Once per class, about four minutes.',
+  'tour.t.exercises':
+    'An exercise is a set of tables plus a task, handed to a class. Every ' +
+    'student gets their own copy and hands their solution back here.',
+  'tour.t.lesson':
+    'During the lesson: who is signed in, who is stuck, and on what. Tell the ' +
+    'class this view exists — announced, it is a tool.',
+  'tour.t.sql':
+    'You have a database of your own, just like the class. For preparing, for ' +
+    'trying things out, and for seeing what your students see.',
+  'tour.t.handbook':
+    'And the rest is in here: the handbook for teachers, with screenshots. ' +
+    'Your class finds their own behind the same button.',
+
+  'tour.s.sql':
+    'This is your workspace. You have a real database, it is yours alone, and ' +
+    'you cannot break anything in it that is not yours.',
+  'tour.s.exercises':
+    'Tasks from your teacher show up here. You get your own copy of the tables ' +
+    'and you can hand in more than once.',
+  'tour.s.settings':
+    'German or English, and light or dark next to it. Both belong to your ' +
+    'account and follow you to the next device.',
+  'tour.s.handbook':
+    'Stuck? The handbook. Short, and it answers the questions that actually ' +
+    'come up in a first lesson.',
 };

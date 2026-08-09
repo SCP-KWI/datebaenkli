@@ -18,6 +18,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 
+import { STEPS } from '../src/web/assets/tour.js';
+
 const WEB = join(import.meta.dirname, '..', 'src', 'web');
 const read = (name) => readFileSync(join(WEB, name), 'utf8');
 
@@ -52,15 +54,7 @@ test('pages: the import dialog carries every id csv-import.js reaches for', () =
 test('pages: every page carries the Chalk head and a theme script', () => {
   // `theme.js` must be a classic script and must run before first paint; a page
   // added without it is a page that flashes white for every dark-mode reader.
-  for (const page of [
-    'home.html',
-    'login.html',
-    'password.html',
-    'sql.html',
-    'lesson.html',
-    'roster.html',
-    'uebungen.html',
-  ]) {
+  for (const page of PAGES) {
     const html = read(page);
     assert.ok(html.includes('<script src="/assets/theme.js"></script>'), `${page}: no theme.js`);
     assert.ok(html.includes('/assets/chalk-tokens.css'), `${page}: no design tokens`);
@@ -69,6 +63,9 @@ test('pages: every page carries the Chalk head and a theme script', () => {
 });
 
 const TOP_BAR_PAGES = ['home.html', 'sql.html', 'uebungen.html', 'lesson.html', 'roster.html'];
+
+/** Every page served out of `src/web`. The two auth pages have no top bar. */
+const PAGES = [...TOP_BAR_PAGES, 'login.html', 'password.html'];
 
 /** The `<nav class="topbar-actions">` block, verbatim. */
 function topBar(html) {
@@ -193,5 +190,63 @@ test('pages: the auth submit buttons are direct children of their form', () => {
       else stack.push(tag);
     }
     assert.deepEqual(stack, [], `${page}: submit button is nested inside <${stack.join('><')}>`);
+  }
+});
+
+/**
+ * Every element the tour points at exists on the page the tour runs on.
+ *
+ * `runTour` drops a step whose target is missing rather than showing a popover
+ * pointing at nothing — right at runtime, and the reason this has to be checked
+ * somewhere else: rename `#nav-roster` and the tour just gets shorter, with no
+ * error anywhere and nobody looking, because seeing it requires a brand-new
+ * account of that role.
+ *
+ * `home.html` specifically, because that is where you land after signing in and
+ * the only page `home.js` starts a tour on. Four of the five targets are in the
+ * top bar, which `pages.test.mjs` already knows is identical everywhere; that
+ * is a convenience, not a licence to run the tour elsewhere.
+ */
+test('pages: home.html carries every element the tour points at', () => {
+  const html = read('home.html').replace(/<!--[\s\S]*?-->/g, '');
+  for (const [role, steps] of Object.entries(STEPS)) {
+    for (const { target } of steps) {
+      assert.match(target, /^#[\w-]+$/, `${role}: ${target} is not a plain id selector`);
+      assert.ok(
+        html.includes(`id="${target.slice(1)}"`),
+        `${role}: no ${target} in home.html — the tour would silently skip this step`,
+      );
+    }
+  }
+  // The replay affordance, which ships `hidden` and is revealed by `home.js`.
+  assert.ok(html.includes('id="tour-again"'), 'home.html: no replay button');
+});
+
+/**
+ * Nothing carries `.btn` and `.mi` at once, because `.mi` loses.
+ *
+ * `.mi` sets the icon font; `.btn, button` sets `font-family: inherit`. Equal
+ * specificity, and `.btn` is written later in `app.css`, so an element with
+ * both renders the ligature as its own name — `password.html`'s sign-out button
+ * said the word "logout" from 0.10.2 until 0.11.0, on the page a teacher is
+ * *held* on by the forced-change gate.
+ *
+ * The five top-bar pages already say `icon-btn mi` with no `.btn`; that is the
+ * shape, and `.icon-btn` plus the base `button` rules give the same box.
+ *
+ * Fixing the order in `app.css` instead was rejected: `font-family: inherit` on
+ * `.btn` is what stops a button picking up a page's serif, and reordering two
+ * rules to fix one button is the kind of change whose blast radius is every
+ * control in the app.
+ */
+test('pages: no element carries both .btn and .mi', () => {
+  for (const page of PAGES) {
+    for (const [, classes] of read(page).matchAll(/\bclass="([^"]*)"/g)) {
+      const names = classes.split(/\s+/);
+      assert.ok(
+        !(names.includes('btn') && names.includes('mi')),
+        `${page}: class="${classes}" — .btn defeats .mi, so the icon renders as a word`,
+      );
+    }
   }
 });

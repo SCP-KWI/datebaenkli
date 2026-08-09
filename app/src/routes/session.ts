@@ -10,7 +10,7 @@ import { createSession, destroySession, destroyUserSessions } from '../auth/sess
 import type { Db } from '../db/query.js';
 import { clearSessionCookie, currentUser, setSessionCookie } from '../http/auth.js';
 import { HttpError, unauthorized } from '../http/errors.js';
-import { asObject, maybe, optionalStr, rawStr, str } from '../http/validate.js';
+import { asObject, bool, maybe, optionalStr, rawStr, str } from '../http/validate.js';
 import {
   authenticate,
   changeOwnPassword,
@@ -187,12 +187,25 @@ export function registerSessionRoutes(app: FastifyInstance, db: Db): void {
     return { user };
   });
 
+  /**
+   * The account's own settings. Three fields, and `tourSeen` is unlike the
+   * other two: it is write-once and one-way (`users.ts` has the SQL), so this
+   * route cannot be used to make an account look new again.
+   *
+   * **A demo lease may set it and it changes nothing**, which is deliberate
+   * rather than an oversight worth guarding. `home.js` does not read
+   * `tourSeenAt` for a demo session at all — it reads `me.demo` first — so the
+   * next visitor gets the tour whatever the column says. Rejecting the call
+   * here would mean a 4xx on the path a demo visitor takes by simply finishing
+   * the tour, which is a worse answer than a no-op.
+   */
   app.patch('/api/me', async (req) => {
     const session = currentUser(req);
     const body = asObject(req.body);
     const user = await updateProfile(db, session.id, {
       ...maybe('locale', optionalStr(body, 'locale', { max: 8 })),
       ...maybe('displayName', optionalStr(body, 'displayName', { max: 120 })),
+      tourSeen: bool(body, 'tourSeen', false),
     });
     return { user };
   });

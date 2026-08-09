@@ -10,7 +10,7 @@
  * one from.
  */
 
-import { json, mountVersion } from '/assets/util.js';
+import { json, mountVersion, wireReveal } from '/assets/util.js';
 
 // `de-CH` hardcoded, and it is the one place that is right: this page has
 // no account to read a locale from, and it is German-first by design. The
@@ -26,33 +26,14 @@ const button = form.querySelector('button[type="submit"]');
 /**
  * Show the password in clear text.
  *
- * The icon and the label name the state the click moves *to*, which is
- * `wireThemeToggle`'s rule in `util.js` and the same trap: the two are one
- * control and describing them separately is how they end up disagreeing in
- * whichever state the author was not looking at.
- *
- * The focus is put back in the field afterwards. Without it the caret is lost
- * to the button, and this is pressed mid-typing by someone checking a slip —
- * having to click back into the field is the whole cost of the feature.
- *
- * Not persisted anywhere. "Show my password by default" is not a preference
- * this app should remember on a machine a class shares.
+ * The behaviour is `wireReveal` in `util.js`, shared with `/password`, which
+ * has three of these. What stays here is the label, and it stays here because
+ * it is the one thing this page cannot share: bilingual literals, since this
+ * file loads no locale (see the header). Every other page passes `t`.
  */
-const password = document.getElementById('password');
-const reveal = document.getElementById('reveal');
-
-reveal.addEventListener('click', () => {
-  const shown = password.type === 'text';
-  password.type = shown ? 'password' : 'text';
-  reveal.textContent = shown ? 'visibility' : 'visibility_off';
-  reveal.setAttribute('aria-pressed', String(!shown));
-  const label = shown
-    ? 'Passwort anzeigen / Show password'
-    : 'Passwort verbergen / Hide password';
-  reveal.setAttribute('aria-label', label);
-  reveal.setAttribute('title', label);
-  password.focus();
-});
+wireReveal(document.getElementById('reveal'), document.getElementById('password'), (shown) =>
+  shown ? 'Passwort verbergen / Hide password' : 'Passwort anzeigen / Show password',
+);
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();

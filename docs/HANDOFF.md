@@ -3,14 +3,17 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.10.6`**. **The deployed version is not known to this file** — it was
+is on **`0.11.0`**. **The deployed version is not known to this file** — it was
 `0.10.0` for a long time, the author deployed again during the §14/§16 session,
 and nobody curled it afterwards. `curl /api/version` (§7), and do not trust the
 next sentence over it —
 §11 (the usability pass), §12 (two things the author found while testing it),
 §13 (the top bar, made one bar), §14 (the student handbook, which is the
 placeholder §13 left), §15 (the packaging test §14d asked for, and the language
-toggle) and §16 (the password reveal, which had been misplaced since 0.10.2).
+toggle), §16 (the password reveal, which had been misplaced since 0.10.2) and
+§17 (the first-run tour). **§17 carries a migration** — `meta/005_tour.sql`,
+the first since phase 10 — so the next deploy is §7's schema-change shape, not
+the application-code-only one.
 **§14's contents are deployed** — the author pulled and rebuilt after §14d's
 fix; §16 was reported off that running server. What is undeployed is whatever
 followed it, so believe `curl /api/version` (§7) rather than this line.
@@ -5510,3 +5513,115 @@ exist to have a rule.
 What a new account *does* get is the forced password change (staff only) and, on
 the demo, the lease banner. If a tour is wanted it is a feature to design, and
 the first question is what it costs the twenty-fifth student to dismiss it.
+
+---
+
+## 17. The first-run tour, and reveals on /password — 0.11.0 (2026-08-09)
+
+**A minor bump, not a patch: this is the first migration since phase 10.**
+`meta/005_tour.sql` adds one column, so a deploy applies it — §7's runbook, not
+the application-code-only shape.
+
+### 17a. Where the tour runs, and why only there
+
+Four popovers for a student, five for a teacher, on **`/` only** — the page you
+land on after signing in, which is what "the main screen" means when the request
+is "when logging in". Each step outlines one control in the top bar and says
+what it is for. Both lists end at the handbook, which is the point: the tour is
+four sentences and a pointer at where the rest is written down.
+
+**The two lists are not translations of one another.** A teacher is told what to
+do first (`Klassen` → `Übungen` → `Lektion` → `SQL-Editor`), because without a
+class there is nothing to distribute to and nothing to watch. A student is told
+what is *theirs* (`SQL-Editor` → `Übungen` → language/theme), in shorter
+sentences, opening on the promise the whole app is built on — "du kannst darin
+nichts kaputt machen, was nicht dir gehört". `test/tour.test.mjs` asserts no key
+is shared between the two, because sharing one is how the second role's wording
+quietly becomes the first's.
+
+**Admins get no tour**, and `STEPS` has no entry for them rather than an empty
+one. There is one admin, they installed the server, and half of what the tour
+points at answers 403 for an account with no Postgres identity.
+
+### 17b. Once per account, always for a demo
+
+Both halves of the author's question, answered opposite ways:
+
+- **A real account: once, recorded in `app_user.tour_seen_at`.** Not
+  `localStorage` — a class shares machines, so per-browser means the first
+  student of the day gets the tour and the next twenty-one do not, on the day it
+  is most needed. The column follows them to the laptop they open at home, which
+  is the argument `locale` already makes one column over.
+- **A demo lease: every time.** `home.js` checks `me.demo` *before*
+  `tourSeenAt`, so a leased account replays regardless of what the column says —
+  it is handed to a new visitor every half hour, and the column would be a fact
+  about a person who no longer exists. Verified by finishing the tour on a demo
+  account, confirming the column got set, reloading, and watching it replay.
+
+**Per-IP was the third option floated and is worse than both: a school is one
+IP.** The whole class shares it, so the first student to log in would consume
+the tour for the other twenty-one — the same failure as `localStorage`, at
+larger scale.
+
+`timestamptz` rather than `boolean` for the reason every other lifecycle column
+here is one: "when" answers "whether" for free. `PATCH /api/me { tourSeen: true }`
+is write-once and one-way — `COALESCE(tour_seen_at, now())` — so the route cannot
+be used to make an account look new. "Show the tour again" is a client-side
+replay from a link on the overview, which is also the fix for skipping it by
+accident.
+
+### 17c. Two things that were not obvious
+
+**`element.style` is not blocked by `style-src-attr 'none'`.** The popover has
+to be positioned at runtime, and the app's CSP forbids `style=` attributes —
+including `setAttribute('style', …)`. CSSOM writes are not covered, and this was
+**verified against the real server rather than reasoned about**, because it
+would fail only under the deployed policy and not under `npm run dev`.
+Everything static is in `app.css`.
+
+**No library.** A tour is four absolutely-positioned boxes and a click handler.
+The smallest popover package would be a fifth runtime dependency, and CLAUDE.md's
+bar for that is an argument better than "it's standard".
+
+`tour.js` is the fifth front-end module and clears the bar CLAUDE.md sets for
+one: `STEPS` is data, both halves of a step fail *silently* — a renamed selector
+makes the tour one step shorter with no error, a mistyped key renders the key
+itself — and a test can reach both. `tour.test.mjs` checks the keys against both
+catalogues; `pages.test.mjs` checks the selectors against `home.html`.
+
+### 17d. `/password` has reveals now, and its sign-out was a word
+
+Three fields, three reveals, same control as `/login`. The behaviour moved into
+`wireReveal` in `util.js` rather than being copied: four copies of a state
+machine is how the theme toggle's label bug happened. `/login` passes a
+bilingual literal because it loads no locale; `/password` passes `t` and
+re-paints after `load()`.
+
+Found while testing it: **`password.html`'s sign-out button rendered the word
+"logout"** rather than the glyph, and had since 0.10.2. `.mi` sets the icon font
+and `.btn, button` sets `font-family: inherit`; equal specificity, `.btn` written
+later, so `.btn` wins. The other five pages say `icon-btn mi` with no `.btn` —
+that is the shape, and this one had it. On the page the forced-change gate can
+*hold* a teacher on.
+
+Reordering `app.css` was rejected — `font-family: inherit` on `.btn` is what
+stops a button picking up a page's serif, and reordering two rules to fix one
+button has every control in the app as its blast radius. `pages.test.mjs` now
+asserts no element carries both classes.
+
+### 17e. Verified
+
+441 unit tests (10 new), typecheck clean, `verify-auth.sh` 96/96,
+`provision.live.test.mjs` 16/16 against a real cluster with all five meta
+migrations applied. Driven in a browser against that server: student tour (4
+steps, correct order, ends at the handbook), teacher tour (5, different targets
+*and* different text), the column set on finish, no tour on reload, replay link
+works, Escape and the scrim both dismiss, English throughout, demo replays after
+finishing. `/password`'s three reveals toggle, translate, return focus, and sit
+centred — the §16 geometry, inherited.
+
+**Not verified:** the tour on a phone, and with a screen reader. The popover is
+`role="dialog"` + `aria-live="polite"` and focus goes to the primary button on
+each step, but focus is not trapped — Tab can leave it for the page behind. That
+is a deliberate limit of a tour over a live page rather than a modal, and it is
+untested with assistive tech.

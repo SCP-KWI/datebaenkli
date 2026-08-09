@@ -319,6 +319,10 @@ export default {
   'password.next': 'Neues Passwort',
   'password.repeat': 'Neues Passwort wiederholen',
   'password.save': 'Speichern',
+  // The reveal on each of the three fields. `wireReveal` names the state the
+  // click moves *to*, so these read as instructions, not as labels.
+  'password.show': 'Passwort anzeigen',
+  'password.hide': 'Passwort verbergen',
   'password.mismatch': 'Die beiden neuen Passwörter stimmen nicht überein.',
   'password.failed': 'Änderung fehlgeschlagen.',
 
@@ -715,4 +719,50 @@ export default {
   // DBK_DEMO_ENABLED was never set.
   'error.demo_disabled': 'Die Demo ist auf dieser Installation nicht eingeschaltet.',
   'error.too_many_requests': 'Zu viele Anfragen. Warte einen Moment.',
+
+  // --- the first-run tour (0.11.0) ------------------------------------------
+  //
+  // Two sets, and they are not translations of each other. A teacher is being
+  // told what to do first; a student is being told what is theirs. The register
+  // differs to match: «Sie verteilen» would be wrong for both, but a teacher
+  // gets full sentences about a workflow and a student gets short ones about a
+  // place. Both end at the handbook, which is the point of the tour.
+  'tour.step': 'Schritt {n} von {total}',
+  'tour.next': 'Weiter',
+  'tour.done': 'Fertig',
+  'tour.skip': 'Überspringen',
+  'tour.again': 'Rundgang nochmals zeigen',
+
+  // Teacher. Ordered by what has to happen first: without a class there is
+  // nothing to distribute to and nothing to watch.
+  'tour.t.roster':
+    'Fang hier an: Klasse anlegen, Namensliste einfügen, Zugangszettel drucken. ' +
+    'Das ist einmal pro Klasse und dauert etwa vier Minuten.',
+  'tour.t.exercises':
+    'Übungen sind Tabellen plus Aufgabenstellung, die du an eine Klasse gibst. ' +
+    'Jede Lernende bekommt eine eigene Kopie und gibt ihre Lösung hier ab.',
+  'tour.t.lesson':
+    'Während der Lektion: wer ist angemeldet, wer hängt fest, und woran. ' +
+    'Sag der Klasse, dass es diese Ansicht gibt — angekündigt ist sie ein Werkzeug.',
+  'tour.t.sql':
+    'Du hast selbst eine Datenbank, genau wie die Klasse. Zum Vorbereiten, ' +
+    'Ausprobieren und um zu sehen, was die Lernenden sehen.',
+  'tour.t.handbook':
+    'Und hier steht der Rest: das Handbuch für Lehrpersonen, mit Bildern. ' +
+    'Deine Klasse findet hinter demselben Knopf ihr eigenes.',
+
+  // Student. Shorter sentences, "du", and the first one is the promise the
+  // whole app is built on.
+  'tour.s.sql':
+    'Das ist dein Arbeitsplatz. Du hast eine echte Datenbank, sie gehört dir ' +
+    'allein, und du kannst darin nichts kaputt machen, was nicht dir gehört.',
+  'tour.s.exercises':
+    'Aufgaben von deiner Lehrperson landen hier. Du bekommst eigene Tabellen ' +
+    'dafür und kannst mehrmals abgeben.',
+  'tour.s.settings':
+    'Deutsch oder Englisch, daneben hell oder dunkel. Beides gilt für dein ' +
+    'Konto und kommt aufs nächste Gerät mit.',
+  'tour.s.handbook':
+    'Wenn du nicht weiterweisst: das Handbuch. Kurz, und beantwortet die ' +
+    'Fragen, die in der ersten Lektion wirklich kommen.',
 };

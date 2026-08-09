@@ -102,6 +102,14 @@
       <h1 id="name">…</h1>
       <p class="role muted small" id="role"></p>
       <!--
+        Replay the tour. Hidden until `home.js` decides this account has a tour
+        to replay — admins have none — so the markup ships it `hidden` rather
+        than the script creating it: `pages.test.mjs` can then check that every
+        selector `tour.js` names exists on this page, and a button built in JS
+        would be invisible to that.
+      -->
+      <p><button id="tour-again" class="tour-again" hidden data-i18n="tour.again">Rundgang nochmals zeigen</button></p>
+      <!--
         An account setting, and it used to sit in the navigation between
         "Klassen" and "Abmelden" — where it read as a sixth section of the app.
         It belongs beside the name and the role, which is what it is about.

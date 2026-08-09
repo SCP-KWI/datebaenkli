@@ -152,6 +152,55 @@ export function wireThemeToggle(button, labelFor) {
 }
 
 /**
+ * Show a password field in clear text.
+ *
+ * It lived in `login.js` while one page had one field. `/password` has three,
+ * and a page that asks a fifteen-year-old to type a new password twice without
+ * letting them see either is the case this exists for more than login was.
+ * Four copies of a state machine is how the theme toggle's bug happened, so:
+ * one.
+ *
+ * `labelFor` is a callback and `paint` is returned, for exactly the reasons
+ * `wireThemeToggle` above states at length — `/password` wires this against the
+ * cached locale and then loads the account's a moment later. `/login` passes a
+ * bilingual literal instead, because it deliberately loads no locale at all.
+ *
+ * **The icon and the label both name the state the click moves *to***, and this
+ * function owns both; the button must carry no `data-i18n-attr` for the label,
+ * or `apply()` will overwrite half of a pair with a constant.
+ *
+ * The focus goes back into the field afterwards. Without it the caret is lost
+ * to the button, and this gets pressed mid-typing by someone checking a slip —
+ * having to click back into the field is the whole cost of the feature.
+ *
+ * Nothing is persisted. "Show my password by default" is not a preference this
+ * app should remember on a machine a class shares.
+ */
+export function wireReveal(button, input, labelFor) {
+  if (!button || !input) return () => {};
+
+  const paint = () => {
+    const shown = input.type === 'text';
+    button.textContent = shown ? 'visibility_off' : 'visibility';
+    button.setAttribute('aria-pressed', String(shown));
+    const label = labelFor?.(shown);
+    if (label) {
+      button.setAttribute('aria-label', label);
+      button.setAttribute('title', label);
+    }
+  };
+
+  button.addEventListener('click', () => {
+    input.type = input.type === 'text' ? 'password' : 'text';
+    paint();
+    input.focus();
+  });
+
+  paint();
+  return paint;
+}
+
+/**
  * Fill in the footer's build stamp. Every page has one; only this fills it.
  *
  * **Never rejects, and renders nothing rather than something wrong.** It runs on

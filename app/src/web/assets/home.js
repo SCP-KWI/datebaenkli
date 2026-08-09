@@ -11,12 +11,14 @@
 import { apply, formats, load, paintCached, t, wireLanguageToggle } from '/assets/i18n.js';
 import {
   esc,
+  json,
   mountDemoBanner,
   mountNav,
   mountVersion,
   wireLogout,
   wireThemeToggle,
 } from '/assets/util.js';
+import { STEPS, runTour } from '/assets/tour.js';
 
 const get = async (url) => {
   const response = await fetch(url);
@@ -65,6 +67,34 @@ else {
     student: 'common.role_student',
   }[user.role];
   byId('role').textContent = `${user.username} · ${t(roleKey)}`;
+
+  /**
+   * The first-run tour.
+   *
+   * **Two different questions, and the order they are asked in is the whole
+   * rule.** A demo lease replays it for every visitor, because a leased account
+   * is a different person every half hour and `tour_seen_at` would be a fact
+   * about the last one. A real account sees it once, recorded on the account
+   * rather than in this browser — a class shares machines, so per-browser would
+   * mean the first student of the day gets it and the next twenty-one do not.
+   *
+   * Admins get no tour: `STEPS` has no entry for them, and half of what it
+   * points at answers 403 without a Postgres identity.
+   *
+   * The PATCH is not awaited before the tour is dismissed and its failure is
+   * swallowed. The worst case is seeing it a second time, which is a smaller
+   * cost than a spinner on a page that is otherwise done — and `mountNav`'s
+   * neighbours make the same call for the same reason.
+   */
+  const steps = STEPS[user.role];
+  const seen = () =>
+    fetch('/api/me', json({ tourSeen: true }, 'PATCH')).catch(() => {});
+
+  if (steps) {
+    byId('tour-again').hidden = false;
+    byId('tour-again').addEventListener('click', () => void runTour(steps, t));
+    if (me.demo || !user.tourSeenAt) void runTour(steps, t).then(seen);
+  }
 
   /**
    * Escaping happens *here*, not at the call sites.

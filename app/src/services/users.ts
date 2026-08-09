@@ -53,6 +53,12 @@ export interface PublicUser {
   pgRole: string | null;
   createdAt: string;
   lastLoginAt: string | null;
+  /**
+   * When this account finished or skipped the first-run tour; `null` = never.
+   * `home.js` reads it to decide whether to run the tour, and *ignores* it for
+   * a demo lease — see `005_tour.sql`.
+   */
+  tourSeenAt: string | null;
 }
 
 /** A freshly created account, with the one-time password to put on the slip. */
@@ -91,7 +97,7 @@ function userColumns(alias = 'app_user'): string {
   ${a}id, ${a}username, ${a}display_name AS "displayName", ${a}role, ${a}state,
   ${a}locale, ${a}must_change_password AS "mustChangePassword",
   ${a}pg_role AS "pgRole", ${a}created_at AS "createdAt",
-  ${a}last_login_at AS "lastLoginAt"`;
+  ${a}last_login_at AS "lastLoginAt", ${a}tour_seen_at AS "tourSeenAt"`;
 }
 
 const USER_COLUMNS = userColumns();
@@ -1102,7 +1108,7 @@ export async function changeOwnPassword(
 export async function updateProfile(
   db: Db,
   userId: number,
-  patch: { locale?: string; displayName?: string },
+  patch: { locale?: string; displayName?: string; tourSeen?: boolean },
 ): Promise<PublicUser> {
   const locale = patch.locale === undefined ? null : checkLocale(patch.locale);
   const displayName = patch.displayName?.trim();
@@ -1120,12 +1126,19 @@ export async function updateProfile(
     const previous = before.rows[0]?.displayName;
 
     const { rows } = await q.query<PublicUser>(
+      // `tour_seen_at` is the one field here that cannot be un-set, and the
+      // asymmetry is deliberate: `$4` false or absent leaves it alone rather
+      // than clearing it. "Show the tour again" is a client-side replay
+      // (`home.js`) and must not look like "pretend this person is new" — the
+      // column answers when they first finished it, and rewriting that to NULL
+      // would lose the only fact it holds.
       `UPDATE app_user
           SET locale = COALESCE($2, locale),
-              display_name = COALESCE($3, display_name)
+              display_name = COALESCE($3, display_name),
+              tour_seen_at = CASE WHEN $4 THEN COALESCE(tour_seen_at, now()) ELSE tour_seen_at END
         WHERE id = $1 AND state = 'active'
         RETURNING ${USER_COLUMNS}`,
-      [userId, locale, displayName ?? null],
+      [userId, locale, displayName ?? null, patch.tourSeen === true],
     );
     const user = rows[0];
     if (!user) throw new ServiceError('user_not_found', 'No such account.');

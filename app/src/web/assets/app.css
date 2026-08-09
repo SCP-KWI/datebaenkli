@@ -1940,3 +1940,81 @@ body[data-page='sql'] .ex-bar .ex-task {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   The first-run tour (0.11.0)
+
+   Everything static is here; `tour.js` sets only `top` and `left` on the
+   popover, through CSSOM rather than a `style=` attribute — the app runs
+   `style-src-attr 'none'` and the attribute would be blocked.
+
+   The scrim does not dim much. This runs over a page the reader has never seen
+   and the point is to make them look *past* it at the bar; a heavy overlay
+   makes the tour the subject instead of the app.
+   --------------------------------------------------------------------------- */
+.tour-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: color-mix(in oklab, var(--ink) 22%, transparent);
+}
+
+/* The highlighted control. It sits *above* the scrim rather than being cut out
+   of it: a real cut-out needs four boxes or an SVG mask, and this reads the
+   same. `position: relative` only when it has none of its own — the nav entries
+   are static, and forcing it here would move anything already positioned. */
+.tour-target {
+  position: relative;
+  z-index: 41;
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--r);
+}
+
+.tour-pop {
+  position: fixed;
+  z-index: 42;
+  width: min(21rem, calc(100vw - 1rem));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 1rem 1.1rem;
+}
+
+.tour-count {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.tour-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+/* The replay link on the overview. A link and not a button: it is a footnote to
+   the role line, and skipping the tour by accident should not be a dead end. */
+.tour-again {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-ink);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tour-again:hover {
+  border-color: transparent;
+  color: var(--accent);
+}
