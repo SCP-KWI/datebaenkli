@@ -9,7 +9,14 @@
  */
 
 import { apply, formats, load, paintCached, t, wireLanguageSelect } from '/assets/i18n.js';
-import { esc, mountDemoBanner, mountVersion, wireLogout, wireThemeToggle } from '/assets/util.js';
+import {
+  esc,
+  mountDemoBanner,
+  mountNav,
+  mountVersion,
+  wireLogout,
+  wireThemeToggle,
+} from '/assets/util.js';
 
 const get = async (url) => {
   const response = await fetch(url);
@@ -118,22 +125,9 @@ else {
   }
   byId('content').innerHTML = html || `<p class="muted">${esc(t('home.nothing'))}</p>`;
 
-  // An admin has no Postgres identity, so /sql has nothing to show them.
-  byId('sql').hidden = user.role === 'admin';
-  // The lesson view is the other way round: staff only, and an admin does
-  // get it — they can reach any class, they just see no schema pane.
-  byId('lesson').hidden = user.role === 'student';
-  // Same audience as the lesson view, and the page an admin needs most:
-  // it is the only way to create a teacher without curl.
-  byId('roster').hidden = user.role === 'student';
-  // Same audience again: the handbook describes exactly the two pages above.
-  // This shell is the overview for students too, which is why the button is
-  // gated here and simply absent from `/sql` — sql.html says what a
-  // student-facing help would have to be instead, and it is not this document.
-  byId('help').hidden = user.role === 'student';
-  // Everyone but an admin: a student has exercises handed to them, a teacher
-  // authors them, and an admin has no Postgres identity to hold either.
-  byId('exercises').hidden = user.role === 'admin';
+  // Which entries this account gets, and the marker on this one. Five copies of
+  // these rules used to live across three files; `util.js` has the argument.
+  mountNav(user.role);
   // Not for a demo lease. The account is thrown away in half an hour, so the
   // link leads to a form whose only possible outcome is a password nobody will
   // ever type again — and to a first-time visitor it reads as a setup step the
@@ -142,10 +136,8 @@ else {
   byId('change').hidden = Boolean(me.demo);
 }
 
-byId('sql').onclick = () => (location.href = '/sql');
-byId('lesson').onclick = () => (location.href = '/lesson');
-byId('roster').onclick = () => (location.href = '/roster');
-byId('exercises').onclick = () => (location.href = '/uebungen');
+// The nav is `<a href>` now and needs no wiring. This is not navigation — it is
+// the account setting that used to sit in the middle of it.
 byId('change').onclick = () => (location.href = '/password');
 // Was this file's own five lines until the button went on every page; the
 // content-type argument that used to be here is now in `wireLogout`, where the

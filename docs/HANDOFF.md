@@ -3,9 +3,10 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the
-server serves `0.10.0` and the repo is on **`0.10.2`, which is not deployed** —
-that is §11 (the usability pass) plus §12 (two things the author found while
-testing it), and together they are the only undeployed code.
+server serves `0.10.0` and the repo is on **`0.10.3`, which is not deployed** —
+§11 (the usability pass), §12 (two things the author found while testing it)
+and §13 (the top bar, made one bar), and together they are the only undeployed
+code.
 
 **The demo is ON in production, and §9 still says it shipped dark.** Curled
 today: `/api/demo` answers `{"enabled":true,"leaseMinutes":30}` and `builtAt` is
@@ -4362,8 +4363,9 @@ The driver's real message is in the app log — `grep 'could not get a connectio
 
 ## 8. Next session should
 
-**Deploy `0.10.2` — the usability pass (§11) and the two follow-ups (§12).**
-It is the only undeployed code and it is entirely front-end. §7's runbook applies unchanged, and the one thing
+**Deploy `0.10.3` — the usability pass (§11), the two follow-ups (§12) and the
+navigation rebuild (§13).** It is the only undeployed code and it is entirely
+front-end. §7's runbook applies unchanged, and the one thing
 to actually check afterwards is that a destructive button still destroys: §11b
 is a bug that made every one of them dead and was invisible to the whole unit
 suite. Run the live suites and both verify scripts as part of it — §11d says why
@@ -5130,3 +5132,96 @@ Everything else was driven in the browser: the reveal both ways including the
 focus returning to the field, that it renders as a ligature rather than the
 literal word, that it fires no login request, the logout label translating while
 the glyph does not, and a real logout leaving `/api/me` answering 401.
+
+---
+
+## 13. The top bar, made one bar — 0.10.3 (2026-08-09, NOT DEPLOYED)
+
+The author's reading of §11 and §12 in a browser: *"the top bar feels a bit
+random, how buttons appear and disappear depending on the page."* It was not the
+unavoidable cost of context-sensitivity. It was drift, and the inventory is the
+whole argument:
+
+| page | section links, in the order they appeared |
+|---|---|
+| `/` | SQL-Editor · Übungen · Lektion · Klassen · **Passwort ändern** |
+| `/sql` | Übungen · Lektion · Klassen · **Übersicht** |
+| `/uebungen` | SQL-Editor · Lektion · Klassen · **Übersicht** |
+| `/lesson` | Klassen · Übungen · **Startseite** |
+| `/roster` | Lektion · Übungen · **Startseite** |
+
+Five pages, five orders. The same destination was `id="overview"` on two pages
+and `id="home"` on two others. **`/sql` was reachable from neither `/lesson` nor
+`/roster`** — the page a class spends the lesson in, unreachable from the two
+pages a teacher works from. An account setting sat in the middle of the
+navigation on `/`. Every page had dropped its own link and kept the rest in
+whatever order it was written in, which is defensible per page and incoherent
+across five, and nothing checked, so nothing failed.
+
+### 13a. The rule
+
+**The set never changes — only the marker moves.** Removing the current page is
+locally sensible and globally corrosive: no two bars look alike, so nothing about
+the bar can be learned. All five entries, always, with `aria-current="page"` on
+the one you are on — which is both the CSS hook and the accessible answer, so
+there is no second class to keep in step with it.
+
+Three consequences, and the second is the one that made `/sql` feel unlike the
+rest:
+
+1. **The markup is one block, byte-identical on all five pages**, the way the CSV
+   dialog already is. `test/pages.test.mjs` compares them (leading whitespace
+   normalised: `roster.html` nests its bar inside `#main` on purpose, so
+   `showSlips()` hiding `#main` takes the language control with it).
+2. **Actions are not navigation.** `/sql`'s import and reset were in the nav
+   strip and nowhere else. They act on the schema pane, so they live in it now:
+   the import beside the "TABELLEN" heading where a table arrives, the reset at
+   the very bottom under the storage figure — beside the number it sets back to
+   zero, and a full pane away from the control §11 found it was one misclick
+   from. There is a test asserting they do not come back.
+3. **The entries are `<a href>`, not buttons.** Middle-click and ctrl-click work,
+   and five scripts lost their `onclick` wiring — the `?` button's argument from
+   phase 7, applied where it was always true.
+
+`mountNav(role)` in `util.js` holds the role rules, which were three copies
+across `home.js`, `sql.js` and `uebungen.js`. **That duplication is why the bars
+disagreed**: `uebungen.js` gated `/lesson` on `role === 'teacher'` while
+`home.js` gated the same link on `role !== 'student'`, and nobody had recorded
+which was meant. Admin now consistently loses `/sql` and `/uebungen` (no Postgres
+identity, so both answer 403), a student loses `/lesson` and `/roster`.
+
+**The `?` is now on `/sql` too.** `sql.html` carried a long comment arguing a
+student page should not link to the teacher's manual; the author's answer was
+that a student handbook is coming and will be linked there, so the button stays
+and `mountNav` is the one place that will need to branch. The old comment is
+gone rather than left to contradict the code.
+
+### 13b. Measured, not asserted
+
+The §12c worry — that the bar was getting too wide — is settled, and in the
+right direction. Rendered in headless Chromium (`/usr/bin/chromium`, no
+puppeteer: serve `dist/web` with a script-free copy of the page and
+`--screenshot`, which is how to get a real viewport when the in-app browser pane
+will not composite):
+
+| viewport | bar as it shipped in 0.10.2 | the new bar |
+|---|---|---|
+| 1150 px | one row | one row |
+| **1100 px** | **two rows** | one row |
+| 1050 px | two rows | two rows |
+
+It gained an entry and the handbook button and still got *tighter*, because the
+two long action labels it lost were worth more than both. Below ~1050 it wraps
+to a second row rather than overflowing, which costs 45 px on a page that is a
+`100dvh` grid — acceptable, and the same behaviour as before.
+
+Driven against a real server for every role: teacher (five entries, correct
+marker on `/uebungen`, `/lesson`, `/roster`, `/sql`), student (three entries,
+`/lesson` and `/roster` hidden), admin (three entries, `/sql` and `/uebungen`
+hidden, "Passwort ändern" in the page body rather than the bar). `/sql?uebung=N`
+still marks SQL-Editor — `location.pathname` drops the query, which is what
+makes an exercise read as "you are in the editor" rather than as nowhere.
+
+**Still not verified: mobile.** Everything above is desktop widths. The bar wraps
+rather than overflows, which is the right failure, but nobody has looked at any
+of this on a phone.

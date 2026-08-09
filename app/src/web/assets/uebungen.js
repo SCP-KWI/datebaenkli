@@ -58,6 +58,7 @@ import {
   esc,
   json,
   mountDemoBanner,
+  mountNav,
   mountVersion,
   wireLogout,
   wireThemeToggle,
@@ -770,16 +771,10 @@ mountDemoBanner(me.demo, t);
 void mountVersion($('version'), (date) => formats().dateTime(date));
 
 const staff = me.user.role === 'teacher' || me.user.role === 'admin';
-$('lesson').hidden = me.user.role !== 'teacher';
-$('roster').hidden = !staff;
-$('help').hidden = !staff;
-// Admins have no Postgres identity, so there is no editor for them to open.
-$('sql').hidden = me.user.role === 'admin';
-
-$('sql').onclick = () => (location.href = '/sql');
-$('lesson').onclick = () => (location.href = '/lesson');
-$('roster').onclick = () => (location.href = '/roster');
-$('overview').onclick = () => (location.href = '/');
+// The bar. This page used to gate four of its entries itself, and its rule for
+// `/lesson` differed from `home.js`'s for no reason anyone recorded — teacher
+// there, staff here. `util.js` holds the one version now.
+mountNav(me.user.role);
 wireLogout($('logout'));
 $('handinClose').onclick = () => $('handinDialog').close();
 

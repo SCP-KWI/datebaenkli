@@ -45,6 +45,7 @@ import {
   esc,
   json,
   mountDemoBanner,
+  mountNav,
   mountVersion,
   wireLogout,
   wireThemeToggle,
@@ -744,9 +745,6 @@ $('slips-done').addEventListener('click', async () => {
   });
   if (go) closeSlips();
 });
-$('lesson').addEventListener('click', () => (location.href = '/lesson'));
-$('exercises').addEventListener('click', () => (location.href = '/uebungen'));
-$('home').addEventListener('click', () => (location.href = '/'));
 
 // --- boot --------------------------------------------------------------------
 
@@ -787,6 +785,9 @@ if (!me) {
   mountDemoBanner(me.demo, t);
   mountVersion($('version'), (d) => formats().dateTime(d));
   wireLogout($('logout'));
+  // The bar is the same markup on all five pages; this is what makes it about
+  // this one. Only reached by staff — the redirect below sends a student away.
+  mountNav(me.user.role);
 
   $('sub').textContent = `${me.user.displayName} · ${
     me.user.role === 'admin' ? t('common.role_admin') : t('common.role_teacher')

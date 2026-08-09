@@ -26,6 +26,7 @@ import {
   json,
   mb,
   mountDemoBanner,
+  mountNav,
   mountVersion,
   ticked,
   wireLogout,
@@ -110,14 +111,11 @@ if (!me || me.user.mustChangePassword || me.user.role === 'admin') {
 const user = me.user;
 $('who').textContent = `${user.displayName} · ${user.username}`;
 
-// The two staff entries in the top bar, which ship `hidden` so that a student
-// never sees a flash of them. Same test as `home.js` uses for the same two
-// buttons — "not a student" rather than "a teacher", because an admin reaches
-// both pages too. An admin never gets this far (they are redirected above), so
-// the line is about students only, and saying it the same way as the other page
-// is worth more than saying it shorter.
-$('lesson').hidden = user.role === 'student';
-$('roster').hidden = user.role === 'student';
+// The bar: which entries this account gets, and the marker on this one. An
+// admin never gets this far — they are redirected above — so in practice this
+// is the student/teacher split, but the rule lives in `util.js` for all five
+// pages rather than being restated here.
+mountNav(user.role);
 
 // --- language ----------------------------------------------------------------
 
@@ -704,10 +702,7 @@ async function importCsv() {
 
 // Wired here rather than as an `onclick=` in the markup: an inline handler
 // needs `script-src 'unsafe-inline'`, and this was the last one in the app.
-$('overview').onclick = () => (location.href = '/');
-$('exercises').onclick = () => (location.href = '/uebungen');
-$('lesson').onclick = () => (location.href = '/lesson');
-$('roster').onclick = () => (location.href = '/roster');
+// The five nav entries are `<a href>` and need none of this.
 wireLogout($('logout'));
 $('run').onclick = () => void run();
 $('cancel').onclick = () => void cancel();

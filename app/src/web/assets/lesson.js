@@ -14,7 +14,15 @@
  */
 
 import { apply, formats, load, paintCached, t, wireLanguageSelect } from './i18n.js';
-import { esc, mb, mountDemoBanner, mountVersion, wireLogout, wireThemeToggle } from './util.js';
+import {
+  esc,
+  mb,
+  mountDemoBanner,
+  mountNav,
+  mountVersion,
+  wireLogout,
+  wireThemeToggle,
+} from './util.js';
 
 const REFRESH_MS = 5000;
 
@@ -221,9 +229,6 @@ document.addEventListener('visibilitychange', () => {
 $('refresh').addEventListener('click', () => void poll());
 // "In dieser Klasse ist noch niemand eingetragen" is the message most likely to
 // need the roster page, so the way there is on this screen rather than via home.
-$('roster').addEventListener('click', () => (location.href = '/roster'));
-$('exercises').addEventListener('click', () => (location.href = '/uebungen'));
-$('home').addEventListener('click', () => (location.href = '/'));
 $('close').addEventListener('click', () => {
   openStudent = null;
   dialog.close();
@@ -273,6 +278,9 @@ wireLanguageSelect($('lang'));
 mountDemoBanner(me.demo, t);
 mountVersion($('version'), (d) => formats().dateTime(d));
 wireLogout($('logout'));
+// The bar is the same markup on all five pages; this is what makes it about
+// this one. Only reached by staff — the redirect above sends a student away.
+mountNav(me.user.role);
 
 /**
  * Null and `{ classes: [] }` are different answers and must not render the same

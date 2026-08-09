@@ -20,30 +20,50 @@
         <span class="wordmark">Datebänkli</span>
       </a>
       <nav class="topbar-actions">
-        <button id="roster" data-i18n="nav.roster">Klassen</button>
-        <button id="exercises" data-i18n="nav.exercises">Übungen</button>
-        <button id="home" data-i18n="nav.overview">Übersicht</button>
+        <!--
+          **The bar, and it is the same bar on all five pages.** `mountNav()` in
+          `util.js` marks the current entry and hides what a role cannot reach;
+          `test/pages.test.mjs` asserts these five blocks have not drifted apart.
+          Edit one, edit all — the test will tell you if you did not.
+
+          It used to be five different bars: five orders, two names for the overview,
+          and `/sql` unreachable from `/lesson` or `/roster` entirely. Each page had
+          dropped its own link and kept the rest in whatever order it was written in,
+          which is defensible per page and incoherent across five. **The current page
+          is listed rather than removed** — that is the whole fix. A set that changes
+          under you cannot be learned; a highlight that moves can.
+
+          Links, not buttons: middle-click and ctrl-click work, and there is no
+          `onclick` to wire in five scripts. The `?` argument at `login.html`.
+        -->
+        <a class="btn navlink" id="nav-overview" href="/" data-i18n="nav.overview">Übersicht</a>
+        <a class="btn navlink" id="nav-sql" href="/sql" data-i18n="nav.sql">SQL-Editor</a>
+        <a class="btn navlink" id="nav-exercises" href="/uebungen" data-i18n="nav.exercises">Übungen</a>
+        <a class="btn navlink" id="nav-lesson" href="/lesson" data-i18n="nav.lesson">Lektion</a>
+        <a class="btn navlink" id="nav-roster" href="/roster" data-i18n="nav.roster">Klassen</a>
+
+        <!-- Everything right of here is about this session rather than about where
+             you are, which is why the divider is here and not somewhere page-specific.
+             A page's own actions belong to the page: `/sql` used to keep two of them
+             in this strip, and that alone made its bar look unlike every other. -->
+        <span class="topbar-sep" aria-hidden="true"></span>
         <select id="lang" class="lang-select" aria-label="Sprache / Language">
           <option value="de">Deutsch</option>
           <option value="en">English</option>
         </select>
-        <!-- No `data-i18n-attr` here on purpose: `wireThemeToggle` owns this
-             label, because it is the only thing that knows which way the toggle
-             currently points. The German below is the no-script fallback. -->
+        <!-- No `data-i18n-attr`: `wireThemeToggle` owns this label, because it is the
+             only thing that knows which way the toggle currently points. The German
+             is the no-script fallback. -->
         <button id="theme" type="button" class="icon-btn mi"
                 aria-label="Auf dunkles Design wechseln"></button>
-        <!-- The handbook. Visible unconditionally: this page is staff-only, so
-             unlike home.html there is nobody here to hide it from. New tab, and
-             no `data-i18n` — login.html has the reasons. -->
-        <a class="btn icon-btn help-link" href="/handbuch" target="_blank" rel="noopener"
-           aria-label="Handbuch öffnen (neues Fenster)"
+        <!-- The handbook. Shown to everyone, including students, who currently get
+             the teacher's manual: a student handbook is coming and will be linked
+             here instead. `mountNav()` is the one place that will need to branch. -->
+        <a id="help" class="btn icon-btn help-link" href="/handbuch" target="_blank"
+           rel="noopener" aria-label="Handbuch öffnen (neues Fenster)"
            title="Handbuch öffnen (neues Fenster)">?</a>
-        <!-- Always the last control in the bar, on every page that has one. It used
-             to be on the overview alone, which meant "sign out" was two clicks and a
-             page load away from wherever anyone actually was — worst on `/sql`, the
-             one page a class sits on for a whole lesson, and on a machine the next
-             class uses. Icon rather than the word, because a bar this full cannot
-             take another label and this is the one glyph nobody has to learn. -->
+        <!-- Last, always: "sign out" must be in the same place on every page, and the
+             right-hand end is the one place that cannot move when the bar wraps. -->
         <button id="logout" type="button" class="icon-btn mi" aria-label="Abmelden"
                 title="Abmelden" data-i18n-attr="aria-label:nav.logout title:nav.logout"
                 >logout</button>

@@ -24,77 +24,49 @@
       <span class="who" id="who"></span>
       <nav class="topbar-actions">
         <!--
-          The section links first, and the same set as every other page's.
+          **The bar, and it is the same bar on all five pages.** `mountNav()` in
+          `util.js` marks the current entry and hides what a role cannot reach;
+          `test/pages.test.mjs` asserts these five blocks have not drifted apart.
+          Edit one, edit all — the test will tell you if you did not.
 
-          They used not to be: this page showed "Übungen" and "Übersicht" only,
-          and put its own two actions where "Lektion" and "Klassen" are
-          everywhere else. A usability pass caught what that costs — a teacher
-          working in their own sandbox mid-lesson is one click from the live
-          class view on five pages and no clicks from it on the one page they
-          are actually on. `sql.js` reveals the two staff entries by role, the
-          way `home.js` and `uebungen.html` already do.
-        -->
-        <button id="exercises" data-i18n="nav.exercises">Übungen</button>
-        <button id="lesson" hidden data-i18n="nav.lesson">Lektion</button>
-        <button id="roster" hidden data-i18n="nav.roster">Klassen</button>
-        <button id="overview" data-i18n="nav.overview">Übersicht</button>
-        <!--
-          This page's own actions, after a divider. The divider is not
-          decoration: "Datenbank zurücksetzen" drops every table this account
-          owns and it used to sit flush against "CSV importieren", same size and
-          same shape, told apart by red text alone. One slip of the mouse
-          between a routine action and an irreversible one is not a risk worth
-          keeping for 8 px.
+          It used to be five different bars: five orders, two names for the overview,
+          and `/sql` unreachable from `/lesson` or `/roster` entirely. Each page had
+          dropped its own link and kept the rest in whatever order it was written in,
+          which is defensible per page and incoherent across five. **The current page
+          is listed rather than removed** — that is the whole fix. A set that changes
+          under you cannot be learned; a highlight that moves can.
 
-          Both are hidden while an exercise is open, and `sql.js`'s exercise
-          section says why: "reset my database" would take the exercise with it,
-          and an import goes to the playground schema rather than to the one on
-          screen. The exercise bar carries the narrow versions of both.
+          Links, not buttons: middle-click and ctrl-click work, and there is no
+          `onclick` to wire in five scripts. The `?` argument at `login.html`.
         -->
+        <a class="btn navlink" id="nav-overview" href="/" data-i18n="nav.overview">Übersicht</a>
+        <a class="btn navlink" id="nav-sql" href="/sql" data-i18n="nav.sql">SQL-Editor</a>
+        <a class="btn navlink" id="nav-exercises" href="/uebungen" data-i18n="nav.exercises">Übungen</a>
+        <a class="btn navlink" id="nav-lesson" href="/lesson" data-i18n="nav.lesson">Lektion</a>
+        <a class="btn navlink" id="nav-roster" href="/roster" data-i18n="nav.roster">Klassen</a>
+
+        <!-- Everything right of here is about this session rather than about where
+             you are, which is why the divider is here and not somewhere page-specific.
+             A page's own actions belong to the page: `/sql` used to keep two of them
+             in this strip, and that alone made its bar look unlike every other. -->
         <span class="topbar-sep" aria-hidden="true"></span>
-        <button id="import" data-i18n="sql.import">CSV importieren</button>
-        <button id="reset" class="btn-danger" data-i18n="sql.reset">Datenbank zurücksetzen</button>
         <select id="lang" class="lang-select" aria-label="Sprache / Language">
           <option value="de">Deutsch</option>
           <option value="en">English</option>
         </select>
-        <!-- No `data-i18n-attr` here on purpose: `wireThemeToggle` owns this
-             label, because it is the only thing that knows which way the toggle
-             currently points. The German below is the no-script fallback. -->
+        <!-- No `data-i18n-attr`: `wireThemeToggle` owns this label, because it is the
+             only thing that knows which way the toggle currently points. The German
+             is the no-script fallback. -->
         <button id="theme" type="button" class="icon-btn mi"
                 aria-label="Auf dunkles Design wechseln"></button>
-        <!--
-          **No handbook button here, and that is a decision rather than an
-          oversight.** The other four teacher-facing pages carry one; this is
-          the student's page and it deliberately does not. `/handbuch` is the
-          teacher's manual — creating classes, printing credential slips,
-          reading the lesson view — so a link to it from this desk answers no
-          question that gets asked at it, and a control that never helps is
-          worse than none. There is likewise no hidden element and no role check
-          for it: nothing to leave dead.
-
-          **Where a student help belongs, when someone writes one.** Right here,
-          as a second `?` pointing at its own short page — not at this one. It
-          has to be a different document, because it has to be bilingual (this
-          page has a language select; the handbook does not), it has to be short
-          enough to read mid-lesson, and it should cover the three things that
-          actually stall someone: why `SELECT * FROM kunden` finds *your* table
-          and nobody else's (`search_path`), why a write is refused once the
-          quota bar in the schema pane fills up, and what the CSV dialog wants
-          from a Swiss export. `assets/hints.js` already holds the SQLSTATE
-          explanations such a page would be the long form of, so it starts there
-          rather than from nothing.
-
-          Deferred on purpose as of this change: the teacher handbook exists and
-          is a known quantity, a student one does not, and shipping a bad one is
-          worse than shipping none.
-        -->
-        <!-- Always the last control in the bar, on every page that has one. It used
-             to be on the overview alone, which meant "sign out" was two clicks and a
-             page load away from wherever anyone actually was — worst on `/sql`, the
-             one page a class sits on for a whole lesson, and on a machine the next
-             class uses. Icon rather than the word, because a bar this full cannot
-             take another label and this is the one glyph nobody has to learn. -->
+        <!-- The handbook. Shown to everyone, including students, who currently get
+             the teacher's manual: a student handbook is coming and will be linked
+             here instead. `mountNav()` is the one place that will need to branch. -->
+        <a id="help" class="btn icon-btn help-link" href="/handbuch" target="_blank"
+           rel="noopener" aria-label="Handbuch öffnen (neues Fenster)"
+           title="Handbuch öffnen (neues Fenster)">?</a>
+        <!-- Last, always: "sign out" must be in the same place on every page, and the
+             right-hand end is the one place that cannot move when the bar wraps. -->
         <button id="logout" type="button" class="icon-btn mi" aria-label="Abmelden"
                 title="Abmelden" data-i18n-attr="aria-label:nav.logout title:nav.logout"
                 >logout</button>
@@ -103,7 +75,29 @@
 
     <main>
       <aside id="browser">
-        <h2 data-i18n="sql.tables">Tabellen</h2>
+        <!--
+          **This page's own two actions live here, not in the top bar.** Both
+          act on exactly this pane — one fills it, the other empties it — and
+          keeping them in the navigation strip was most of what made this page's
+          bar look unlike the other four.
+
+          Placing them apart is the other half, and it is the fix for a
+          usability finding: "Datenbank zurücksetzen" used to sit flush against
+          "CSV importieren", same size and same shape, told apart by red text
+          alone. The import is at the top, where a table arrives; the reset is
+          at the very bottom, under the storage figure — beside the number it
+          sets back to zero, and a full pane's scroll away from anything anyone
+          clicks twice an hour.
+
+          Both are hidden while an exercise is open (`sql.js`): a reset would
+          take the exercise with it, and an import goes to the playground schema
+          rather than to the one on screen. The exercise bar carries the narrow
+          versions of both.
+        -->
+        <div class="browser-head">
+          <h2 data-i18n="sql.tables">Tabellen</h2>
+          <button id="import" class="small" data-i18n="sql.import">CSV importieren</button>
+        </div>
         <div id="tree" class="empty" data-i18n="common.loading">wird geladen …</div>
         <!--
           Disk usage, filled by sql.js and hidden until it has a figure. No
@@ -115,6 +109,9 @@
           `renderQuota()`.
         -->
         <p id="quota" hidden></p>
+        <button id="reset" class="small btn-danger" data-i18n="sql.reset">
+          Datenbank zurücksetzen
+        </button>
       </aside>
 
       <section id="work">

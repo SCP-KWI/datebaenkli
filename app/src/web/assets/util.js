@@ -179,6 +179,55 @@ export async function mountVersion(element, formatDate) {
 }
 
 /**
+ * The top bar: mark where we are, hide what this account cannot reach.
+ *
+ * **The set of entries never changes — only the marker moves.** That is the
+ * whole design, and it replaced five pages that each dropped their own link and
+ * kept the rest in whatever order they were written in. Removing the current
+ * page is locally sensible and globally corrosive: no two bars looked alike, so
+ * nothing about the bar could be learned, and `/sql` had quietly become
+ * unreachable from `/lesson` and `/roster` without anyone deciding that.
+ *
+ * **The role rules are here and nowhere else.** They used to be three copies —
+ * `home.js`, `sql.js`, `uebungen.js` — with slightly different comments, which
+ * is exactly how the five bars came to disagree in the first place. A fourth
+ * page is now one call.
+ *
+ * Two of them are worth stating rather than reading off the table:
+ *
+ * - **An admin has no Postgres identity at all**, so `/sql` and `/uebungen`
+ *   would answer 403 for them. Not a permission judgement — there is no schema.
+ * - **A student's `/lesson` and `/roster` are staff pages.** The server enforces
+ *   that; this only saves them a redirect, and the page scripts still bounce a
+ *   student who types the URL.
+ *
+ * `hidden` rather than removal, so the markup stays the byte-identical block
+ * `test/pages.test.mjs` compares across pages.
+ */
+const NAV_HIDDEN = {
+  student: ['nav-lesson', 'nav-roster'],
+  admin: ['nav-sql', 'nav-exercises'],
+  teacher: [],
+};
+
+export function mountNav(role, path = location.pathname) {
+  for (const id of NAV_HIDDEN[role] ?? []) {
+    const link = document.getElementById(id);
+    if (link) link.hidden = true;
+  }
+
+  for (const link of document.querySelectorAll('.navlink')) {
+    // `getAttribute`, not `.href`: the property is absolute, and comparing
+    // `http://host/sql` against a pathname silently marks nothing.
+    const target = link.getAttribute('href');
+    // `/sql?uebung=3` is still `/sql` — `location.pathname` drops the query,
+    // which is what makes an exercise read as "you are in the SQL editor"
+    // rather than as nowhere at all.
+    if (target === path) link.setAttribute('aria-current', 'page');
+  }
+}
+
+/**
  * Sign out. One implementation, because the wrong copy of it is silent.
  *
  * It lived in `home.js` while the button was on one page. Now it is on every

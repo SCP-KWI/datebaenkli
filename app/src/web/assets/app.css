@@ -203,11 +203,32 @@ samp {
   flex-wrap: wrap;
 }
 
-/* Between "go somewhere else" and "do something here" — currently only on
-   `/sql`, where the something is a `DROP SCHEMA`. A hairline plus the gap on
-   either side of it, so the destructive button is not adjacent to a harmless
-   one by accident. `aria-hidden` in the markup: it is a visual grouping and
-   there is nothing for a screen reader to read out. */
+/* A section link. An `<a>` wearing `.btn`, so it looks like what it sits beside
+   — and `a:hover` underlines, which would draw a line under a control that is
+   not a sentence. Same fix as `a.icon-btn`, one rule up. */
+.navlink:hover {
+  text-decoration: none;
+}
+
+/* Where you are. `aria-current="page"` is set by `mountNav()` and is both the
+   hook and the accessible answer — a screen reader says "current page" without
+   anything else being added, and there is no second class to keep in step with
+   it.
+
+   Tinted rather than bordered: the bar is a row of bordered controls, so an
+   extra border reads as another kind of button rather than as a state. The same
+   treatment `.ex-item.sel` uses for the same reason, one screen over. */
+.navlink[aria-current='page'] {
+  background: var(--accent-tint);
+  border-color: transparent;
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* Between "go somewhere else" and "this session" — on every page now, in the
+   same place, which is half of why the bar reads as two groups rather than as
+   nine controls. `aria-hidden` in the markup: it is a visual grouping and there
+   is nothing for a screen reader to read out. */
 .topbar-sep {
   width: 1px;
   align-self: stretch;
@@ -1129,6 +1150,14 @@ body[data-page='sql'] #browser {
   border-right: 1px solid var(--line);
   background: var(--surface-2);
 }
+/* The pane's own heading row: "TABELLEN" and the import that fills it. */
+body[data-page='sql'] .browser-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
 body[data-page='sql'] #browser h2 {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1136,7 +1165,24 @@ body[data-page='sql'] #browser h2 {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--faint);
-  margin: 0 0 0.5rem;
+  margin: 0;
+}
+/* The reset, at the very bottom of the pane and nowhere near the import.
+
+   Both used to be in the top bar, adjacent, the same size and shape, told apart
+   by red text alone — one slip of the mouse between "add a table" and "drop
+   every table I own". They act on this pane, so they belong to it; putting a
+   scroll between them is what stops the misclick, and sitting under the storage
+   line puts this one beside the number it sets back to zero.
+
+   `margin-top: auto` would need `#browser` to be a flex column, which is the
+   one geometry on this page that phase 7 declined to change blind (§4pp). A
+   plain margin is enough: the tree above it is as tall as it is, and a control
+   that sits just below the content rather than pinned to the floor is the
+   right relationship anyway — it is about the tables, not about the pane. */
+body[data-page='sql'] #reset {
+  margin-top: 1.5rem;
+  width: 100%;
 }
 body[data-page='sql'] #browser summary {
   cursor: pointer;
