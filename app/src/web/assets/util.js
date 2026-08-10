@@ -14,6 +14,26 @@
  * seeing it". Each says which way at its own definition.
  */
 
+// Relative, not `/assets/…`: `test/util.test.mjs` imports this module in Node,
+// where a root-absolute specifier resolves against the filesystem and fails.
+import { installSessionGuard } from './session-guard.js';
+
+/**
+ * **The one side effect in this file, and the only one in the front end.**
+ *
+ * It wraps `window.fetch` so that no request can be made in the name of a
+ * session the browser has since replaced — a cookie belongs to the profile, not
+ * to the tab, so a second sign-in anywhere silently re-points every open tab.
+ * `session-guard.js` has the whole argument, including why this is a wrap and
+ * not a helper the twenty-odd call sites would have had to remember.
+ *
+ * Here because every page script imports this module — six pages, plus
+ * `i18n.js` and `csv-import.js` — so there is exactly one install and no
+ * seventh page can be added without it. Import evaluation runs before any
+ * page's own top-level `fetch`, which is what makes even `/api/me` covered.
+ */
+installSessionGuard();
+
 /**
  * Display names and every catalog name are free text; none of it is trusted markup.
  *

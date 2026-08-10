@@ -16,7 +16,7 @@
  * it is what makes a demo lease 30 minutes rather than 30 minutes of idleness.
  */
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import { config } from '../config.js';
 import type { Db, Queryable } from '../db/query.js';
@@ -46,6 +46,40 @@ export function newSessionToken(): string {
 
 function tokenKey(token: string): string {
   return createHash('sha256').update(token).digest('base64url');
+}
+
+/**
+ * A name one session answers to, safe to hand to the page's own JavaScript.
+ *
+ * The browser's cookie jar is per *profile*, not per tab, so every tab of this
+ * app shares one session and a second login anywhere in the browser silently
+ * re-points all of them (HANDOFF §18). A tab therefore has to be able to ask
+ * "am I still the session I rendered as?", which needs a value it can compare —
+ * and the two obvious candidates are both wrong to expose.
+ *
+ * The cookie token is the credential itself: `httpOnly` exists so that a missed
+ * `esc()` cannot read it, and putting it in a response header hands it back to
+ * exactly the script that must not have it. `tokenKey(token)` — the row's
+ * primary key — is not a credential, since the server only ever compares
+ * `sha256(presented)` against it, but it is the database identifier for a live
+ * session, and "cannot be replayed as a login" is a thin thing to be relying on
+ * in a value we publish on every response.
+ *
+ * So: an HMAC under the session secret, which is unforgeable without that
+ * secret, reveals nothing about the token, and is stable for the life of the
+ * session — which is what makes it comparable across two requests from the same
+ * tab. Truncated because 128 bits is far past what "did this change?" needs.
+ *
+ * It changes when the *session* changes, not merely when the user does. That is
+ * deliberate: the demo pool hands the same account to a new visitor half an
+ * hour later, and a tab left open on the old lease must not quietly decide it
+ * is still looking at its own data.
+ */
+export function sessionFingerprint(token: string): string {
+  return createHmac('sha256', config.secrets.session)
+    .update(tokenKey(token))
+    .digest('base64url')
+    .slice(0, 22);
 }
 
 export interface SessionOrigin {

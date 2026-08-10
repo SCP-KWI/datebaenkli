@@ -20,7 +20,10 @@ import {
 } from '../services/users.js';
 
 export function registerSessionRoutes(app: FastifyInstance, db: Db): void {
-  app.post('/api/login', { config: { public: true } }, async (req, reply) => {
+  // `changesIdentity`: signing in is allowed to disagree with whatever session
+  // the browser held a moment ago — that is what the form is for. See the
+  // session-switch check in `http/auth.ts`.
+  app.post('/api/login', { config: { public: true, changesIdentity: true } }, async (req, reply) => {
     const body = asObject(req.body);
     const username = str(body, 'username', { max: 63 });
     const password = rawStr(body, 'password');
@@ -72,7 +75,12 @@ export function registerSessionRoutes(app: FastifyInstance, db: Db): void {
 
   // Public and idempotent: logging out should work even from a dead session,
   // and it must always end with the cookie gone.
-  app.post('/api/logout', { config: { public: true } }, async (req, reply) => {
+  //
+  // `changesIdentity` for that second half. A tab whose session was replaced
+  // under it is precisely a tab someone wants out of, and refusing its logout
+  // with a 409 would leave the way out of a confusing state as the one button
+  // that does not work.
+  app.post('/api/logout', { config: { public: true, changesIdentity: true } }, async (req, reply) => {
     if (req.auth) await destroySession(db, req.auth.token);
     clearSessionCookie(reply);
     return { ok: true };

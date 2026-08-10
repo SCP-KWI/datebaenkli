@@ -52,7 +52,16 @@ export function registerDemoRoutes(app: FastifyInstance, db: Db, demo: DemoServi
    * fetch is followed silently — the page would then have a session and no idea
    * where to go.
    */
-  app.post('/api/demo/start', { config: { public: true } }, async (req, reply) => {
+  // `changesIdentity`, like `/api/login`: a visitor who already holds a session
+  // — their own, or an earlier demo lease in another tab — is allowed to claim
+  // a slot, and the session-switch check in `http/auth.ts` would otherwise
+  // refuse the request for disagreeing with the cookie it is about to replace.
+  //
+  // It is *also* the route that most often makes some other tab stale, which is
+  // what §18 is about: the demo button is the one way an ordinary visitor ends
+  // up with two sessions in one browser without meaning to.
+  const startConfig = { config: { public: true, changesIdentity: true } };
+  app.post('/api/demo/start', startConfig, async (req, reply) => {
     if (!config.demo.enabled) {
       // 404 rather than 403: on an instance with the demo off, this route is
       // not a thing the caller lacks permission for, it is a thing that does

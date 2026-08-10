@@ -2,8 +2,11 @@
 
 Running state document. Update it at the end of every working session.
 
-**Last updated:** 2026-08-09 (evening) · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.11.1`**. **The deployed version is not known to this file** — it was
+**Last updated:** 2026-08-10 · **Phases 0–10 are DEPLOYED**; the repo
+is on **`0.11.2`** — §18, a High-severity bug found in testing: one browser's
+tabs share one session cookie, so a second sign-in silently re-pointed every
+open tab, and a teacher tab carried on sending requests that executed as a
+student. Application code only, no migration. **The deployed version is not known to this file** — it was
 `0.10.0` for a long time, the author deployed again during the §14/§16 session,
 and nobody curled it afterwards. `curl /api/version` (§7), and do not trust the
 next sentence over it —
@@ -228,6 +231,18 @@ that way.
 ---
 
 ## 0. Start here (read this before opening any file)
+
+**§18 is the newest thing here and is the one to read before touching auth, the
+front end's `fetch` calls, or any route's `config`** (0.11.2, 2026-08-10). One
+browser's tabs share one session cookie, so a second sign-in re-points them all;
+a stale tab's requests used to execute as whoever signed in last. Two things it
+changed outside its own files:
+
+- **A route is subject to a session-switch check unless it says
+  `changesIdentity`**, the same closed-by-default shape as `public`. Three
+  routes say it. A fourth needs the argument made out loud (§18d).
+- **`util.js` wraps `window.fetch`** — the front end's one side effect, and the
+  reason a new page or a new call site is covered without doing anything (§18e).
 
 **Phase 10 — the public demo — is BUILT and NOT DEPLOYED** (2026-08-09). **§9 is
 the design and the whole argument**; read it before touching anything with `demo`
@@ -652,6 +667,13 @@ Two consequences worth knowing before touching deployment:
   `config: { public: true }`.
 - **Session tokens are stored hashed.** A read of the meta database yields
   nothing replayable.
+- **The session cookie stays `httpOnly`, and the session is *not* per tab**
+  (§18, 0.11.2). A cookie jar belongs to the browser profile, so every tab
+  shares one session and always will; the only way to give a tab its own
+  credential is to put a token where the page's JavaScript can read it, which
+  is the one thing `httpOnly` is for. What a tab gets instead is the ability to
+  *notice*: `x-dbk-session` on every `/api` request and response, a
+  `409 session_switched` on the way in, and a stop on the way out.
 - **A student cannot be removed from their last class** (`409 last_class`) — a
   classless student is reachable by nobody but an admin.
 - **A teacher may only enrol students they already have.** Enrolment *is* the
@@ -5661,3 +5683,186 @@ Verified against a real server by pressing both demo buttons in a browser:
 teacher lands on `/` with "Schritt 1 von 5" on `Klassen`, student with "Schritt
 1 von 4" on `SQL-Editor`. 442 unit tests, `verify-auth.sh` 96/96,
 `demo.live.test.mjs` 6/6.
+
+---
+
+## 18. Session state bled across tabs — 0.11.2 (2026-08-10)
+
+Reported from testing, marked High:
+
+> Session state bled across same-origin browser tabs: with multiple concurrent
+> demo sessions open, a teacher tab was silently swapped to a student session
+> (and vice versa) mid-navigation, and the SQL editor briefly showed a different
+> guest user's schema/username.
+
+Real, reproduced, fixed. **The diagnosis attached to it was wrong**, and that is
+worth recording first, because it points somewhere there is nothing to find.
+
+### 18a. It was never localStorage
+
+The report ends "this points to auth/session state being stored in shared
+localStorage rather than being scoped per tab or per session token." There is no
+auth state in client storage at all. The app puts exactly two things there —
+`chalk-theme` (device-local, `localStorage` is its source of truth) and
+`chalk-lang` (a paint-ahead cache; the account always wins) — and both say so at
+their definitions in `util.js` and `i18n.js`. `grep -rn localStorage src/web`
+is the whole audit.
+
+**The session is an `httpOnly`, signed cookie, and a cookie jar belongs to the
+browser profile, not to the tab.** That is the entire mechanism. Sign in
+anywhere in the browser — most easily by pressing a demo button in a second tab
+— and `Set-Cookie` re-points *every* open tab at the new session. The first tab
+keeps its rendered DOM, its top bar, its wired handlers and its editor contents,
+while every request it makes from that moment executes as the other account. It
+looks like state bleeding between tabs. It is one piece of state that was never
+per-tab in the first place.
+
+Reproduced against a throwaway cluster in three curl commands: claim a teacher
+slot, claim a student slot in the same cookie jar, then ask the "teacher tab"
+who it is —
+
+```
+the teacher tab answers as: u_demo_gast_1 (student)
+```
+
+### 18b. Why per-tab scoping was not the fix
+
+The obvious reading of the report is "scope the session per tab". The only way
+to do that is to put a token somewhere the tab's own JavaScript can reach —
+`sessionStorage` plus an `Authorization` header — and that is precisely what
+`httpOnly` exists to prevent. This app renders text that teachers and students
+typed, into `innerHTML`, on purpose (`markdown.js`); trading an XSS-proof
+session for a tab-proof one is the wrong direction. **Do not revisit this
+without reading that trade first.**
+
+So the fix is not isolation but detection, in both directions, and neither half
+is decoration:
+
+- **Up.** Every `/api` request carries `x-dbk-session`, the fingerprint of the
+  session the page believes it is. `http/auth.ts` refuses a mismatch with
+  `409 session_switched` **before the handler runs**, so a stale tab's click
+  lands as nobody rather than as whoever the cookie now names. This is the half
+  that matters, and it is enforced by the server: it holds whether or not the
+  browser cooperates, and it is what `verify-auth.sh` checks.
+- **Down.** Every `/api` response names the session that answered, and
+  `assets/session-guard.js` stops the page dead when that is not the session it
+  rendered as — an opaque interstitial over the whole page, because what is
+  behind it is another account's data and leaving that legible under a warning
+  is half a fix.
+
+### 18c. The fingerprint is an HMAC, and the two obvious values were both wrong
+
+`sessionFingerprint()` in `auth/session.ts` is
+`HMAC-SHA256(session secret, tokenKey(token))`, truncated to 22 base64url
+characters.
+
+The cookie token itself is the credential — publishing it in a response header
+hands it to exactly the script `httpOnly` keeps it from. `tokenKey(token)`, the
+`session` table's primary key, is not a credential (the server only ever
+compares `sha256(presented)` against it) but it is the database identifier of a
+live session, and "cannot be replayed as a login" is a thin thing to be relying
+on in a value emitted on every response. The HMAC reveals neither, is
+unforgeable without the secret, and is stable for the life of the session, which
+is what makes it comparable across two requests from the same tab.
+
+**It changes when the session changes, not merely when the user does.** The demo
+pool hands the same account to a different visitor half an hour later; a tab
+left open on the old lease must not decide it is still looking at its own data.
+
+`none` is the fingerprint of not being signed in. No HMAC can collide with it.
+
+### 18d. `changesIdentity`, and the three routes that carry it
+
+The check is on by default and a route opts *out* — the same shape as `public`
+and for the same reason. Exactly three opt out, and each is a route whose job is
+to disagree with the cookie the browser is holding: `/api/login`,
+`/api/logout`, `/api/demo/start`.
+
+Logout is the one worth stating. Refusing it would leave the person whose tab
+went stale with the way out of a confusing state as the one button that does not
+work.
+
+`/api/me/password` deliberately does **not** carry the flag, though it does
+rotate the session (`changeOwnPassword` drops every session the account had).
+It must still be refused when the browser has moved on to somebody else. The
+page follows the rotation instead, which is the rule in 18e.
+
+**A fourth `changesIdentity` needs the argument made out loud.** The flag turns
+off the one thing standing between a stale tab and an action executed as
+somebody else.
+
+### 18e. The browser half, and why it wraps `fetch`
+
+`assets/session-guard.js` wraps `window.fetch` once, installed from `util.js`,
+which every page script already imports. Not a helper the call sites opt into:
+there are twenty-odd `fetch(` call sites across nine modules plus the editor
+bundle, and the failure mode of a missed one *is* the bug being fixed. A guard
+that has to be remembered is not a guard.
+
+`verdict()` is pure and exported, and `test/session-guard.test.mjs` is the only
+thing that can see it be wrong — both ways of being wrong are invisible in a
+browser. Its rule:
+
+| the response says | verdict |
+|---|---|
+| no fingerprint at all | pass — not `/api`, or an older build mid-deploy |
+| the fingerprint we hold | pass |
+| something else, and we sent ours, and it is a 2xx | **adopt** — the server checked our claim and then rotated the session itself |
+| something else, any other way | **halt** |
+
+That third row is where the client leans on the server, and it is only sound
+because of 18d: a labelled request has been checked against the cookie before
+its handler ran. An *unlabelled* one — the small window before the first `/api`
+answer establishes an identity — has been checked against nothing, so a changed
+fingerprint there is a halt even on a 2xx.
+
+After a halt nothing more runs: `fetch` returns a promise that never settles.
+Deliberately not a rejection — every call site in this app has a `.catch` that
+turns a failure into "render nothing" or "show an error", and both would have
+the page carry on quietly underneath a box saying it had stopped.
+
+**Signing in again as yourself in a second tab also stops the first one**, and
+that is the accepted cost of a session-grained fingerprint rather than a
+user-grained one. The alternative loses the case the granularity is *for*: the
+demo pool hands the same account to a different visitor, so "same user id" is
+not the same person. What was done about the wart is the wording — the box says
+"eine andere Sitzung", not "ein anderes Konto", because the commonest reader of
+it is somebody looking at a box telling them a different account is signed in
+when they can see it is their own.
+
+Two texts, chosen by whether the fingerprint is `none`: **replaced** (somebody
+signed in) offers a reload, **ended** (nobody is signed in — logged out in
+another tab, or the lease ran out) goes to `/login`. Bilingual literals rather
+than `t()`, following `login.js`: this is reachable on a page whose own locale
+came from the account that is no longer signed in, so a guest who claimed the
+demo in English would otherwise be told in German that something went wrong.
+
+### 18f. What was verified, and how
+
+Server, against a throwaway cluster (§6) — `verify-auth.sh` is **108/108** with
+thirteen new checks in a section of its own: that a live session answers under a
+fingerprint and an anonymous one under `none`, that a page carries none at all
+(they are cacheable constants), that a stale fingerprint is refused on a read
+*and* on a write, that **the refused write did not happen** — the locale is read
+back — and that the three `changesIdentity` routes are let through.
+
+Browser, two real tabs against a running app:
+
+- tab A claims a demo slot, tab B claims another in the same browser, tab A's
+  next request puts up "Diese Sitzung wurde ersetzt" — with the stale content
+  covered, checked by `elementFromPoint`, not by eye;
+- tab B is untouched throughout: `/sql` loads, a three-statement script runs,
+  the language toggle's `PATCH /api/me` and reload work;
+- tab A's reload button brings it back as the account the browser now holds;
+- logging out in tab B puts "Diese Sitzung wurde beendet" in tab A.
+
+### 18g. For the next session
+
+- **This is undeployed.** No migration — application code only, so §7's short
+  shape.
+- The deploy is safe to roll: a response with no `x-dbk-session` decides
+  nothing, so a browser holding the new page against an old server, or the
+  reverse, degrades to exactly today's behaviour rather than stopping tabs.
+- `test/demo.live.test.mjs` and the other live suites send no fingerprint and
+  are unaffected — the guarantee is offered to a page that asks for it, not an
+  authentication step.

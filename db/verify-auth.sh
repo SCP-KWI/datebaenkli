@@ -218,6 +218,51 @@ check "…which kills the student's live session"  401 -b "$S" "$B/api/me"
 check "…and the old password"                    401 -X POST "${JSON[@]}" -d "{\"username\":\"$SU\",\"password\":\"$SP\"}" "$B/api/login"
 check "…while the new one works"                 200 -c "$S" -X POST "${JSON[@]}" -d "{\"username\":\"$SU\",\"password\":\"$NEWP\"}" "$B/api/login"
 
+# The fingerprint a response answers under. Only `curl -D` can see it, which is
+# why this exists rather than another `json` call: `check` keeps the body, and
+# the whole point of the header is that it is *not* in the body — a page reads
+# it off responses it would otherwise throw away.
+sid_of() { curl -s -D - -o /dev/null "$@" | tr -d '\r' | awk 'tolower($1)=="x-dbk-session:"{print $2}'; }
+
+# A cookie jar belongs to the browser profile, not to the tab, so a second
+# sign-in anywhere re-points every open tab at the new session and the old one
+# carries on sending requests that now execute as somebody else (HANDOFF §18).
+# `session-guard.js` is the browser half; this is the half that has to hold
+# whether or not the browser cooperates, so it is checked here rather than only
+# in a unit test of the guard's decision.
+echo "=== a request may not be made in the name of a session this browser lost ==="
+SKEY=$(sid_of -b "$S" "$B/api/me")
+{ [ -n "$SKEY" ] && [ "$SKEY" != "none" ]; } \
+  && { echo "  PASS  a live session answers under a fingerprint"; PASS=$((PASS+1)); } \
+  || { echo "  FAIL  no usable x-dbk-session on /api/me  << got '$SKEY' >>"; FAIL=$((FAIL+1)); }
+[ "$(sid_of "$B/api/version")" = "none" ] \
+  && { echo "  PASS  …and no session answers under 'none'"; PASS=$((PASS+1)); } \
+  || { echo "  FAIL  an anonymous /api response should say none"; FAIL=$((FAIL+1)); }
+# The pages are byte-for-byte constants and are cached on purpose; a per-session
+# header on them would be both a lie and a reason they could not be.
+[ -z "$(sid_of "$B/login")" ] \
+  && { echo "  PASS  …and a page carries none at all"; PASS=$((PASS+1)); } \
+  || { echo "  FAIL  /login carries a per-session header"; FAIL=$((FAIL+1)); }
+
+check "the right fingerprint is let through"     200 -b "$S" -H "x-dbk-session: $SKEY" "$B/api/me"
+check "a stale one is refused"                   409 -b "$S" -H 'x-dbk-session: someothertab' "$B/api/me"
+[ "$(json .error.code)" = "session_switched" ] \
+  && { echo "  PASS  …and says session_switched"; PASS=$((PASS+1)); } \
+  || { echo "  FAIL  wrong error code: $(json .error.code)"; FAIL=$((FAIL+1)); }
+# The half that matters. A read under the wrong identity is a wrong screen; a
+# write under it is a teacher's click landing as a student, or the reverse.
+check "…and so is a write"                       409 -b "$S" -X PATCH "${JSON[@]}" -H 'x-dbk-session: someothertab' -d '{"locale":"en-CH"}' "$B/api/me"
+check "…the account is readable again"           200 -b "$S" "$B/api/me"
+[ "$(json .user.locale)" != "en-CH" ] \
+  && { echo "  PASS  …and the refused write did not happen"; PASS=$((PASS+1)); } \
+  || { echo "  FAIL  the 409 came after the handler ran"; FAIL=$((FAIL+1)); }
+# The three `changesIdentity` routes. Refusing these would leave a person whose
+# tab went stale with no way out of it — signing in and signing out are exactly
+# what disagreeing with the current cookie is *for*.
+check "signing in may always disagree"           200 -c "$S" -H 'x-dbk-session: someothertab' -X POST "${JSON[@]}" -d "{\"username\":\"$SU\",\"password\":\"$NEWP\"}" "$B/api/login"
+check "…and so may signing out"                  200 -b "$S" -c "$S" -H 'x-dbk-session: someothertab' -X POST "${JSON[@]}" "$B/api/logout"
+check "the student logs back in"                 200 -c "$S" -X POST "${JSON[@]}" -d "{\"username\":\"$SU\",\"password\":\"$NEWP\"}" "$B/api/login"
+
 echo "=== lifecycle ==="
 check "an unknown state value is a 400"          400 -b "$T" -X PATCH "${JSON[@]}" -d '{"state":"banana"}' "$B/api/students/$SID/state"
 # The teacher/admin split on `cold`, which phase 7.3 put a button behind and so

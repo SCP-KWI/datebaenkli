@@ -906,6 +906,45 @@ body.has-demo[data-page='sql'] #browser {
   margin: 0 0 0.2rem;
 }
 
+/* The stop `session-guard.js` puts up when this browser has been signed in as
+   somebody else in another tab.
+
+   **Opaque, and covering everything.** Not a `<dialog>`, which is what every
+   other question in this app is: a modal dims the page behind it and leaves it
+   legible, and the whole reason this exists is that the page behind it is
+   another account's data. `z-index` above `.demo-bar`'s 50 for the same reason
+   — the countdown belongs to the session that is no longer this one.
+
+   No `hidden` handling and no dark-mode block: the element does not exist until
+   the guard creates it, and every colour here is a token that `[data-theme]`
+   has already redefined. */
+.session-lost {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.session-lost > div {
+  max-width: min(34rem, 100%);
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+.session-lost h2 {
+  margin: 0 0 0.6rem;
+  font-size: 17px;
+}
+.session-lost p {
+  margin: 0 0 0.8rem;
+  font-size: 14px;
+}
+
 /* ============================================================================
    Page-specific. Everything above is shared by all six pages.
    ============================================================================ */

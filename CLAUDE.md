@@ -73,6 +73,13 @@ concatenation, which is the line `import.ts` draws.
 gate are global hooks; a route is open only if it says `config: { public: true }`.
 A route added without thinking about it is closed, which is the right default.
 
+The same shape holds for `changesIdentity` (0.11.2): a route is subject to the
+session-switch check unless it says otherwise, and exactly three say otherwise —
+`/api/login`, `/api/logout`, `/api/demo/start`, the three whose job *is* to
+disagree with the cookie the browser is holding. A fourth needs the argument
+made out loud, because the flag turns off the one thing standing between a
+stale tab and an action executed as somebody else (`docs/HANDOFF.md` §18).
+
 `POST /api/demo/start` (phase 10) is the one route that hands out a session to a
 caller who proved nothing, and it is deliberate — `docs/HANDOFF.md` §9d has the
 argument. What keeps it narrow is that it can only ever return one of a fixed
@@ -121,6 +128,23 @@ header carries the one rule that keeps it safe — **escape everything first, th
 insert tags** — which is `util.js`'s `ticked()` argument at greater length. Do
 not relax it, and do not "improve" it by reaching for a library: that would be
 the fifth runtime dependency.
+
+**`session-guard.js` is the fifth** (0.11.2) and clears the same bar from the
+other side: it is the one module that can be wrong by doing *nothing*. It stops
+a tab acting as an account the browser has since been signed in as somewhere
+else — a cookie jar is per profile, not per tab — and both ways of being wrong
+are invisible in a browser: too slack and the bug is back and looks like working
+software, too eager and a lesson dies behind an interstitial nobody can dismiss.
+`verdict()` is pure and exported for exactly that, and `test/session-guard.test.mjs`
+is the only thing that can see the difference.
+
+It is also **the one module in the front end with a side effect**: it wraps
+`window.fetch`, installed by `util.js`, which every page already imports. That
+is deliberate and it is the argument to preserve — there are twenty-odd `fetch(`
+call sites across nine modules and the failure mode of a missed one *is* the
+bug. A guard that has to be remembered at the call site is not a guard. The
+server half (`http/auth.ts`, `409 session_switched`) holds whether or not this
+file does; do not delete one on the grounds that the other exists.
 
 **There is exactly one stylesheet, and one classic script** (phase 7).
 `assets/app.css` holds the shell above its banner comment and page-scoped rules
@@ -174,6 +198,7 @@ Three layers, and the split matters:
 | `test/names.test.mjs` | nothing — pure functions | splitting a pasted class list; the only part of the roster page testable without a browser |
 | `test/hints.test.mjs` | nothing — pure functions | the German SQLSTATE explanations and the did-you-mean. Every `message` in it was copied off a real server — **get a new one the same way**, because four of the shapes are not what they look like. The `2BP01` block is the one exception and says so at the site: PGlite 18.3, because no cluster existed that day |
 | `test/chalk.test.mjs` | nothing — two files on disk | that the portable and served copies of `chalk-tokens.css` have not drifted, and that the accent is declared *and* aliased. The drift is the whole point: the portable copy is the one pasted into the other Chalk apps, and it is not the one anyone edits |
+| `test/session-guard.test.mjs` | nothing — pure functions | one decision: whether this tab is still the session it rendered as. The `labelled` cases are where the browser's rule leans on the server's — a labelled request has already been checked against the cookie, which is the only reason a changed fingerprint on a 2xx may be followed |
 | `test/markdown.test.mjs` | nothing — pure functions | the task-text renderer. The safety block comes **first** in that file on purpose: every case in it is a way the escape-first rule could be broken by a well-meaning edit, and each would render identically to correct output in a browser |
 | `test/pages.test.mjs` | nothing — the HTML on disk | that the CSV dialog's markup is byte-identical in `sql.html` and `uebungen.html`, that both carry every id `csv-import.js` reaches for, and that no page has grown an inline script, handler or `style=` — which is the only thing that keeps `script-src 'self'` worth having |
 | `test/exercise.test.mjs` | migrated PGlite + a recording provisioner | the exercise bookkeeping: which schema name gets reserved, that a *second* open does not replay the fixtures over a student's work, what a take-back decides to drop, that attempts are assigned rather than derived, and what the download says |
@@ -267,7 +292,7 @@ The live suite needs a throwaway cluster — the exact commands are in
 dev machine, and a deletion correctly refuses to drop a schema it could not dump.
 
 `db/verify-isolation.sh` (41 checks, SQL sequences) and `db/verify-auth.sh`
-(95 checks, HTTP against a running app) are the end-to-end nets. Run both after
+(108 checks, HTTP against a running app) are the end-to-end nets. Run both after
 touching auth or provisioning.
 
 The isolation script covers **exercise workspaces** since phase 9, and it needed
