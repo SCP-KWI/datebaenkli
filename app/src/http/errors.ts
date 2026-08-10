@@ -122,10 +122,47 @@ const SERVICE_ERROR_STATUS: Record<string, number> = Object.assign(Object.create
   member_not_found: 404,
 });
 
-export function registerErrorHandler(app: FastifyInstance): void {
-  app.setNotFoundHandler((req: FastifyRequest, reply: FastifyReply) =>
-    reply.code(404).send({ error: { code: 'not_found', message: `No route for ${req.url}.` } }),
-  );
+/**
+ * Whether this 404 is being *read* by someone, or parsed by something.
+ *
+ * A mistyped address in the URL bar used to get `{"error":{"code":"not_found"}}`
+ * in the browser's default font — the app admitting it did not expect a person
+ * (HANDOFF §19). What it gets now is `web/404.html`.
+ *
+ * Three conditions, and each excludes a caller that would be worse off with
+ * HTML. `GET`/`HEAD` only: a POST that missed is a bug in a caller, not a
+ * person browsing. Not `/api` or `/assets`: those have exactly one audience
+ * each — `fetch` and the `<link>`/`<script>` tags — and a page script that
+ * asked for a missing route and got HTML would fail on `response.json()` with
+ * an error naming the wrong thing entirely. And `Accept: text/html`, which is
+ * what a navigation sends and `curl` does not.
+ */
+function wantsHtml(req: FastifyRequest): boolean {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  if (req.url.startsWith('/api/') || req.url.startsWith('/assets/')) return false;
+  return (req.headers.accept ?? '').includes('text/html');
+}
+
+/**
+ * `notFoundPage` is a getter rather than a string because of boot order: this
+ * runs at module level in `server.ts`, and the pages are only read off disk
+ * inside `start()` — deliberately, so a build that shipped JS without the HTML
+ * fails through that function's structured error path. Passing the value would
+ * mean passing `null` forever.
+ */
+export function registerErrorHandler(
+  app: FastifyInstance,
+  notFoundPage: () => string | null = () => null,
+): void {
+  app.setNotFoundHandler((req: FastifyRequest, reply: FastifyReply) => {
+    const html = wantsHtml(req) ? notFoundPage() : null;
+    if (html !== null) {
+      return reply.code(404).type('text/html; charset=utf-8').send(html);
+    }
+    return reply
+      .code(404)
+      .send({ error: { code: 'not_found', message: `No route for ${req.url}.` } });
+  });
 
   app.setErrorHandler((err: FastifyError, req, reply) => {
     if (err instanceof HttpError) {

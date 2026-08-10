@@ -396,7 +396,14 @@ const demo = makeDemoService({ db, prov });
 
 await app.register(fastifyCookie, { secret: config.secrets.session });
 
-registerErrorHandler(app);
+/**
+ * The friendly 404, set once `start()` has read the pages off disk. Null until
+ * then, which is the honest state: before that there is nothing to send, and
+ * the handler falls back to the JSON shape every other error uses.
+ */
+let notFoundPage: string | null = null;
+
+registerErrorHandler(app, () => notFoundPage);
 registerAuthHooks(app, db);
 
 /**
@@ -480,7 +487,7 @@ async function start(): Promise<void> {
   // Reads dist/web from disk, so it belongs inside start(): a build that shipped
   // JS without the HTML then fails through this function's structured error
   // path instead of as a bare stack during module evaluation.
-  registerPageRoutes(app);
+  notFoundPage = registerPageRoutes(app);
 
   /**
    * The asset tree — the editor bundle and the student page's script.

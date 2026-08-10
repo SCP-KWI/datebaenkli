@@ -262,6 +262,13 @@ export const config = {
      * far more than any lesson produces — the widest realistic grid is a few
      * hundred KB — and small enough that a dozen students hitting it at once
      * cannot exhaust the heap.
+     *
+     * **That last clause was false until 0.11.3**, and the shape of the bug is
+     * worth keeping next to the number: the budget was checked before the row
+     * was added rather than against its size, so the first row was admitted
+     * whatever it weighed and one `repeat('x', 100000000)` came back as a 95 MB
+     * response. `makeResultLimiter` in `services/query.ts` is where it is now
+     * enforced, and a row that does not fit is refused rather than clipped.
      */
     maxResultBytes: int('DBK_MAX_RESULT_BYTES', 16 * 1024 * 1024),
     /** Per-student Postgres connections. Must stay <= the role's CONNECTION LIMIT. */

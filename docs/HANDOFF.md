@@ -3,10 +3,11 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-08-10 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.11.2`** — §18, a High-severity bug found in testing: one browser's
-tabs share one session cookie, so a second sign-in silently re-pointed every
-open tab, and a teacher tab carried on sending requests that executed as a
-student. Application code only, no migration. **The deployed version is not known to this file** — it was
+is on **`0.11.3`** — §19, the second testing round: four fixes, one declined
+with an argument, and one report that was a misreading of a working row cap but
+turned up a **real** hole underneath it (a single row could be any size, so one
+statement came back as a 95 MB response). §18 before it was the tab-bleed fix.
+Both are application code only, no migration. **The deployed version is not known to this file** — it was
 `0.10.0` for a long time, the author deployed again during the §14/§16 session,
 and nobody curled it afterwards. `curl /api/version` (§7), and do not trust the
 next sentence over it —
@@ -232,7 +233,15 @@ that way.
 
 ## 0. Start here (read this before opening any file)
 
-**§18 is the newest thing here and is the one to read before touching auth, the
+**§19 is the newest thing here** (0.11.3, 2026-08-10) and one item in it is
+worth reading even if the rest is not: `services/query.ts`'s byte budget did not
+hold, so a single row could be any size and one statement returned a **95 MB**
+response. `makeResultLimiter` is where the two result caps now live, and
+`test/query-caps.test.mjs` pins both directions — including the property that a
+grid must be a *prefix* of the result, which is the one an edit is most likely
+to break. §19 also declines the "confirm before DROP" request, with the reason.
+
+**§18 is the one to read before touching auth, the
 front end's `fetch` calls, or any route's `config`** (0.11.2, 2026-08-10). One
 browser's tabs share one session cookie, so a second sign-in re-points them all;
 a stale tab's requests used to execute as whoever signed in last. Two things it
@@ -5866,3 +5875,180 @@ Browser, two real tabs against a running app:
 - `test/demo.live.test.mjs` and the other live suites send no fingerprint and
   are unaffected — the guarantee is offered to a page that asks for it, not an
   authentication step.
+
+---
+
+## 19. The second testing round — 0.11.3 (2026-08-10)
+
+Six items came back from testing the deployed 0.11.2. Four were fixed, one was
+a misreading that turned up a **real bug underneath it**, and one is declined
+with an argument. Taken in that order, because the middle one is the only one
+that mattered.
+
+### 19a. The unbounded cross join — what was reported, and what was actually wrong
+
+> [Medium] An unbounded triple cross-join (no LIMIT) executed fully and returned
+> 2,515,456 rows in ~2.8 seconds with no timeout, row cap, or warning.
+
+**The row cap was there and it worked.** Reproduced exactly — 136³ is 2,515,456
+— and measured at the wire:
+
+```
+rowCount reported by Postgres: 2'515'456
+rows actually shipped to the browser: 1000
+truncated: true
+response body size: 9 kB
+```
+
+The 2.5 million is the *label* on the grid, and it is deliberate: `services/query.ts`
+streams rows through a listener, keeps `maxResultRows` of them and lets the
+statement finish so Postgres's own count can be reported. That is what turns a
+clipped grid into "showing the first 1000 of 2,515,456" instead of a silent lie.
+The timeout is real too — the same shape of query at 1000³ was cancelled at
+**15.001 s** with `57014` and `cancelled: {reason: "timeout"}`.
+
+**But the byte budget beside it did not hold**, and the probe that was supposed
+to confirm the report was wrong found it:
+
+```
+SELECT repeat('x', 100000000) FROM generate_series(1,20);
+   →  rows kept: 1   response body: 95.4 MB
+```
+
+The check was `if (budget <= 0) stop` **before** adding the row rather than
+against the row's size, so the first row was admitted whatever it weighed — a
+16 MB ceiling that admits one row of any size is not a ceiling, and `config.ts`
+said in as many words that a dozen students hitting it at once could not exhaust
+the heap. It could. One student could.
+
+Fixed in `makeResultLimiter` (split out of `execute` and exported for the test):
+a row is kept only if it **fits in what is left**, and the first one that does
+not takes the rest of the script with it. That second half is the part to not
+"simplify" later — a grid has to be a *prefix* of the result, and skipping one
+wide row to keep the next would show rows 1, 2 and 4 under a heading that says
+4. Same probe after: **0.1 kB**, `truncated: true`. An ordinary 5000-row grid is
+unchanged at 1000 rows.
+
+`test/query-caps.test.mjs` is new and pins both directions, including the prefix
+property, because the old code passed every assertion anyone had thought to
+write: `rows.length` was right the whole time. The memory was not.
+
+**What is not changed is the wall clock**, and the numbers are worth having in
+one place before anyone lowers something: `statement_timeout` 15 s per role,
+the watchdog at 20 s, `work_mem` 8 MB, `CONNECTION LIMIT 4` with a pool of 2,
+`temp_file_limit` cluster-wide, 50 MB of disk. A public instance that wants a
+tighter demo has `DBK_STATEMENT_TIMEOUT` and nothing else to change; it was left
+alone here because 15 s is also what a class's honest `GROUP BY` over a term of
+imported data gets, and this is a teaching tool before it is a public one.
+
+### 19b. Other students' schema names in the sidebar — not reproducible
+
+> [Low] The sidebar exposes other demo users' schema names (e.g.
+> u_demo_bianchi_marco) even though their row data isn't accessible.
+
+Asked of Postgres directly, which is where the answer lives — the schema browser
+runs `has_schema_privilege` over `pg_namespace` on a connection opened *as the
+student*, so the tree is whatever the database says:
+
+```
+        nspname        | gast1_usage | t_demo_usage
+-----------------------+-------------+--------------
+ demo                  | t           | t
+ public                | t           | t
+ u_demo1_bianchi_marco | f           | t
+ u_demo1_keller_sara   | f           | t
+ u_demo_gast_1         | t           | f
+ u_demo_gast_2         | f           | f
+```
+
+A demo **student** sees `public`, the shared `demo` dataset and their own schema.
+Nothing else — including the other guest slot. `catalog.live.test.mjs`'s first
+case pins exactly this and passes.
+
+`u_demo1_*` are the three fixture students in the demo teacher's class, and the
+`t` column next to them is the teacher's — a teacher reading their own class's
+schemas is the feature, and the names are fictional people invented by
+`services/demo.ts`.
+
+**Confirmed by the tester: it was seen from the teacher demo.** So this is the
+app working, and the item is closed rather than deferred. Worth keeping the
+table above anyway — it is the cheapest way to answer the same question next
+time, and the next person to ask it will be someone who has just read a report
+that sounds exactly like a leak.
+
+### 19c. The three that were simply fixed
+
+- **An empty query was a silent no-op.** `run()` opened with a bare `return`, so
+  the one button on the page did nothing at all for the reader most likely to
+  press it first. It says `sql.empty` in the status line now. The status line and
+  not the result pane: nothing ran, so there is no result to replace, and
+  clearing the previous grid would throw away what they were looking at.
+- **The nonsense-URL 404 was raw JSON.** `web/404.html` now answers a browser
+  navigation, and the JSON shape still answers everything else — `GET`/`HEAD`
+  only, never under `/api` or `/assets`, and only with `Accept: text/html`. Each
+  of those excludes a caller that would be worse off with a page: a page script
+  that got HTML back from a missing route would fail on `response.json()` with
+  an error naming the wrong thing entirely.
+  **It is the one page in the app with no script**, deliberately — it is what a
+  request that matched nothing gets, which includes every way the app can be
+  half-broken, and a 404 that needs `/assets/*.js` to render is silent in
+  exactly the cases it exists for. `test/pages.test.mjs` pins that.
+- **The demo's rate-limit banner was English on a bilingual page.** `login.js`
+  fell through to `error.message`, which is the server's developer string. Every
+  code a visitor can reach is spelled out bilingually now; the seconds come from
+  `Retry-After` rather than by parsing the digit out of an English sentence.
+
+### 19d. "Gast" in English, and the handbook
+
+Two halves of one report, and they get opposite answers.
+
+**"Gast" is fixed.** The pool's accounts really are called `1 Gast` and
+`Lehrperson Demo` in `app_user`, because `services/demo.ts` creates them through
+the same `createStudents` every real account uses and a display name is data.
+But in the top bar it is not somebody's name, it is a label for a slot, so
+`accountLabel()` in `util.js` translates it — and *only* for the account looking
+at the page. A demo teacher's roster still says "Muster Lena": those are
+fictional people, and translating a name is a different mistake from translating
+a label.
+
+**The handbook stays German, and that is not an oversight.** `login.html` has
+carried the argument since phase 7: the `?` link deliberately has no `data-i18n`,
+because an English label would promise a document that is not there. Translating
+`docs/handbuch.html` and `docs/handbuch-lernende.html` is a content job — two
+long documents, twelve screenshots, generated by `docs/handbook-src/build.mjs`,
+which is shared with the sister apps. It is a real gap for an English reader and
+it is not a code change; nothing here pretends otherwise.
+
+### 19e. No confirmation on destructive SQL — declined, with the argument
+
+> [Low] Destructive SQL (DROP/CREATE/DELETE) against a student's own schema runs
+> instantly with zero confirmation prompt.
+
+This one is deliberate and should stay. **`DROP TABLE` is the lesson, not the
+accident.** The editor exists so that a fifteen-year-old can type DDL and watch
+what happens; a dialog in front of every `DROP` teaches that the dangerous thing
+is the *app's* opinion rather than the statement, and after the third one it is
+clicked without reading — at which point it has taught the opposite of the
+lesson and costs a click.
+
+What makes that affordable is everything around it, and it is worth naming so
+nobody has to re-derive it: the blast radius is one schema that Postgres itself
+bounds (CLAUDE.md's one invariant), the account owns nothing anybody else needs,
+and "Datenbank zurücksetzen" is one click away and *does* ask — as does handing
+in an exercise, and taking one back. Those three have the property this does
+not: they destroy something the student cannot type back.
+
+The one version of this that would have been defensible — a confirm on
+`DROP`/`TRUNCATE` **inside an exercise workspace**, where there is handed-in
+work to lose — was offered and **declined by the author**. So the editor asks
+nothing, on purpose, everywhere. Do not add it back on the reasoning that it is
+only a small dialog; the argument against it is not about the cost.
+
+### 19f. For the next session
+
+- Undeployed. Application code only, no migration.
+- The 404 page is a new file under `app/src/web/`, which `postbuild`'s
+  `cp -R src/web dist/` already carries — unlike a handbook, it needs no
+  `.dockerignore` allow-line (§0's four-places rule is about `docs/`, not this).
+- `test/query-caps.test.mjs` is the twelfth PGlite-free test file and adds no
+  memory to the suite's peak.

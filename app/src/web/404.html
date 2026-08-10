@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="de" data-app="datebaenkli">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Seite nicht gefunden / Page not found — Datebänkli</title>
+    <link rel="preload" href="/assets/fonts/source-sans-3-400-latin.woff2" as="font"
+          type="font/woff2" crossorigin />
+    <link rel="preload" href="/assets/fonts/material-symbols-rounded-400.woff2" as="font"
+          type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/assets/fonts.css" />
+    <link rel="stylesheet" href="/assets/chalk-tokens.css" />
+    <link rel="stylesheet" href="/assets/app.css" />
+    <script src="/assets/theme.js"></script>
+  </head>
+  <body data-page="auth">
+    <!--
+      A mistyped URL used to answer `{"error":{"code":"not_found"}}` in the
+      browser's default font, which is the app admitting it did not expect a
+      person to be reading. Reported from testing (HANDOFF §19).
+
+      **The only page in the app with no script at all**, and that is the point
+      rather than an omission. This is what a request that matched nothing gets,
+      which includes every way the app can be half-broken — a bad deploy, a
+      missing `dist/web`, a proxy pointed at the wrong place. A page that needed
+      `/assets/*.js` to say "that address does not exist" would be a page that
+      says nothing precisely when it is most needed. It also means `/api/me` is
+      never called from here, so a 404 cannot log anyone out or trip the session
+      guard.
+
+      Bilingual for the same reason `login.html` is: it is reachable without a
+      session, so there is no `app_user.locale` to read, and the pages are
+      served as static bytes with no server-side substitution (routes/pages.ts).
+
+      The link goes to `/`, not back in history: whoever is here typed or
+      followed something wrong, and the overview is the page that says what this
+      account can reach. A logged-out visitor is redirected from there to
+      `/login` by `home.js`, which is one hop and the honest one.
+    -->
+    <div class="auth card">
+      <div class="brand-stack">
+        <span class="brand-badge mi" aria-hidden="true">database</span>
+        <h1>Datebänkli</h1>
+      </div>
+
+      <h2>Seite nicht gefunden <span class="en" lang="en">/ Page not found</span></h2>
+      <p class="muted small">
+        Diese Adresse gibt es nicht. Vielleicht ein Tippfehler, oder der Link ist alt.<br />
+        <span lang="en">There is nothing at this address — a typo, perhaps, or an old link.</span>
+      </p>
+
+      <a class="btn primary" href="/">Zur Übersicht / To the overview</a>
+    </div>
+
+    <footer class="footer">
+      <span class="footer-contact">Fragen oder Probleme / Questions or problems:
+        <a href="mailto:philip.schaffner@kwi.ch">philip.schaffner@kwi.ch</a></span>
+    </footer>
+  </body>
+</html>

@@ -10,6 +10,7 @@
 
 import { apply, formats, load, paintCached, t, wireLanguageToggle } from '/assets/i18n.js';
 import {
+  accountLabel,
   esc,
   json,
   mountDemoBanner,
@@ -58,7 +59,10 @@ else {
   mountDemoBanner(me.demo, t);
   mountVersion(byId('version'), (d) => formats().dateTime(d));
 
-  byId('name').textContent = user.displayName;
+  // `accountLabel`, not `displayName`: a demo lease's stored name is German
+  // data ("1 Gast"), and this is the top bar, not a roster. util.js has the
+  // distinction. After `apply()`, so `t` reads the account's own locale.
+  byId('name').textContent = accountLabel(user, me.demo, t);
   // Spelt out rather than `t('common.role_' + user.role)`: a key built by
   // concatenation is a key that grep cannot find when it is renamed.
   const roleKey = {

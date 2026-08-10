@@ -183,10 +183,65 @@ const GRID_TYPES = {
  * memory. `rowMode: 'array'` means a row is a flat array, so there is no
  * nesting to walk.
  */
-function rowBytes(row: unknown[]): number {
+export function rowBytes(row: unknown[]): number {
   let total = 0;
   for (const cell of row) total += typeof cell === 'string' ? cell.length : 8;
   return total;
+}
+
+/**
+ * The two caps, as one object, because the interesting part is where they meet.
+ *
+ * Split out of `execute` and exported when a probe found the byte budget did
+ * not hold: `SELECT repeat('x', 100000000) FROM generate_series(1,20)` came
+ * back as a **95 MB** response with `rows.length === 1`. The old test was
+ * `if (budget <= 0) stop` *before* subtracting, so the budget was only ever
+ * consulted about rows that had already been let in — and the very first row is
+ * always let in, whatever it weighs. A 16 MB ceiling that admits one row of any
+ * size is not a ceiling, and `config.ts`'s claim that a dozen students hitting
+ * it at once cannot exhaust the heap was false as written.
+ *
+ * So a row is kept only if it **fits in what is left**, and the first one that
+ * does not takes the rest of the script with it (`budget = 0`). That second
+ * half is not tidiness. A grid has to be a *prefix* of the result: skipping one
+ * wide row and carrying on with the next would show rows 1, 2 and 4 under a
+ * heading that says 4, which is a lie no student could catch. Stopping is
+ * visible — `truncated` says so.
+ *
+ * One budget for the whole script, not one per statement: it is the whole
+ * response that has to fit in memory and then serialise, so ten statements each
+ * just under a per-statement cap is the same OOM with extra steps.
+ *
+ * Pure, and tested in `test/query-caps.test.mjs` against plain objects. Both
+ * ways of being wrong here are quiet — too slack is the heap, too strict is a
+ * grid that silently loses its tail — and nothing else in the suite can see
+ * either.
+ */
+export function makeResultLimiter(maxRows: number, maxBytes: number) {
+  /** Keyed by the per-statement Result node-postgres hands the listener. */
+  const kept = new Map<object, unknown[][]>();
+  const clipped = new Set<object>();
+  let budget = maxBytes;
+
+  return {
+    offer(result: object, row: unknown[]): void {
+      let rows = kept.get(result);
+      if (rows === undefined) kept.set(result, (rows = []));
+      // The row cap needs no flag: `truncated` derives it by comparing what we
+      // kept against the count Postgres reported, which is the honest number.
+      if (rows.length >= maxRows) return;
+      const size = rowBytes(row);
+      if (size > budget) {
+        budget = 0;
+        clipped.add(result);
+        return;
+      }
+      budget -= size;
+      rows.push(row);
+    },
+    rowsFor: (result: object): unknown[][] => kept.get(result) ?? [],
+    clippedOnBytes: (result: object): boolean => clipped.has(result),
+  };
 }
 
 async function execute(
@@ -209,39 +264,20 @@ async function execute(
     types: GRID_TYPES,
   } as pg.QueryConfig);
 
-  // Keyed by the per-statement Result object node-postgres hands to the
-  // listener, which is how rows are attributed to their statement in a script.
-  const kept = new Map<object, unknown[][]>();
-  const stoppedOnBytes = new Set<object>();
-
   /**
-   * The byte budget is for the **whole script**, not per statement.
-   *
-   * `maxRows` bounds the row *count*, which is the case this file's header
-   * reasons about at length (`generate_series(1, 1e9)`). It says nothing about
-   * row *width*, and the two are independent: `SELECT repeat('x', 100000000)
-   * FROM generate_series(1,20)` is twenty rows and two gigabytes. Nothing else
-   * catches it either — `statement_timeout` and the watchdog bound wall clock,
-   * not bytes already buffered, and a loopback socket moves well over a
-   * gigabyte inside fifteen seconds.
-   *
-   * One budget across the script rather than one each, because it is the whole
-   * response that has to fit in memory and then serialise; ten statements each
-   * just under a per-statement cap is the same OOM with extra steps.
+   * The row cap and the byte budget both live in here — see
+   * `makeResultLimiter`, which also says why the second one exists at all:
+   * `maxRows` bounds the row *count*, which is what this file's header reasons
+   * about (`generate_series(1, 1e9)`), and says nothing about row *width*.
+   * Nothing else catches width either — `statement_timeout` and the watchdog
+   * bound wall clock, not bytes already buffered, and a loopback socket moves
+   * well over a gigabyte inside fifteen seconds.
    */
-  let budget = maxBytes;
+  const limiter = makeResultLimiter(maxRows, maxBytes);
 
   query.on('row', (row: unknown[], result?: object) => {
     if (result === undefined) return;
-    let rows = kept.get(result);
-    if (rows === undefined) kept.set(result, (rows = []));
-    if (rows.length >= maxRows) return;
-    if (budget <= 0) {
-      stoppedOnBytes.add(result);
-      return;
-    }
-    budget -= rowBytes(row);
-    rows.push(row);
+    limiter.offer(result, row);
   });
 
   const results = await new Promise<RawResult | RawResult[]>((resolve, reject) => {
@@ -257,7 +293,7 @@ async function execute(
     // with no command tag. There is no grid to draw for it.
     .filter((r) => r.command !== undefined && r.command !== null)
     .map((r) => {
-      const rows = kept.get(r) ?? [];
+      const rows = limiter.rowsFor(r);
       const rowCount = r.rowCount ?? 0;
       return {
         command: r.command ?? null,
@@ -274,7 +310,7 @@ async function execute(
         // says it was cut, and this is the case where a student's own query
         // produced rows too wide to hold rather than too many.
         truncated:
-          (rows.length === maxRows && rowCount > rows.length) || stoppedOnBytes.has(r),
+          (rows.length === maxRows && rowCount > rows.length) || limiter.clippedOnBytes(r),
       };
     });
 }

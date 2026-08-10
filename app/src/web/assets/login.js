@@ -87,6 +87,46 @@ fetch('/api/demo')
   })
   .catch(() => {});
 
+/**
+ * What went wrong with a demo claim, in both languages.
+ *
+ * The fallback used to be `error.message`, which is the server's **English**
+ * developer string — so a German reader who pressed the button twice too fast
+ * got "Too many demo sessions from this address. Try again in 47 seconds." on
+ * an otherwise bilingual page (HANDOFF §19). Every code a visitor can actually
+ * reach is spelled out here instead; the fallback stays for the ones a bug
+ * would produce, where an English sentence beats a blank banner.
+ *
+ * `Retry-After` rather than the seconds inside that message: the header is the
+ * same number, it is already there for exactly this, and parsing a sentence for
+ * a digit is how a message becomes load-bearing without anyone deciding it is.
+ * Rounded up — a banner that says one second for the last half of it is worse
+ * than one that says two.
+ */
+function demoError(code, response) {
+  if (code === 'demo_pool_busy') {
+    return (
+      'Gerade sind alle Demo-Zugänge belegt. Versuch es in ein paar Minuten nochmals. / ' +
+      'Every demo account is in use right now. Try again in a few minutes.'
+    );
+  }
+  if (code === 'too_many_attempts' || code === 'too_many_requests') {
+    const wait = Math.max(1, Math.ceil(Number(response.headers.get('retry-after')) || 60));
+    return (
+      `Zu viele Versuche von dieser Adresse. Nochmals in ${wait} Sekunden probieren. / ` +
+      `Too many attempts from this address. Try again in ${wait} seconds.`
+    );
+  }
+  if (code === 'not_found') {
+    // The demo is off on this instance, and the route 404s rather than saying
+    // so (routes/demo.ts). The button should not have been visible at all, so
+    // this is only reachable if it was turned off between the page load and
+    // the click — during a deploy, in other words.
+    return 'Die Demo ist gerade nicht verfügbar. / The demo is not available right now.';
+  }
+  return 'Demo nicht verfügbar. / Demo unavailable.';
+}
+
 for (const [id, role] of [
   ['demo-student', 'student'],
   ['demo-teacher', 'teacher'],
@@ -101,11 +141,7 @@ for (const [id, role] of [
       const response = await fetch('/api/demo/start', json({ role }));
       const payload = await response.json();
       if (!response.ok) {
-        error.textContent =
-          payload?.error?.code === 'demo_pool_busy'
-            ? 'Gerade sind alle Demo-Zugänge belegt. Versuch es in ein paar Minuten nochmals. / ' +
-              'Every demo account is in use right now. Try again in a few minutes.'
-            : (payload?.error?.message ?? 'Demo nicht verfügbar. / Demo unavailable.');
+        error.textContent = demoError(payload?.error?.code, response);
         return;
       }
       location.href = payload.landing;

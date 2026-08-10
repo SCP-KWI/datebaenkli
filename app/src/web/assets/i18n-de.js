@@ -225,6 +225,10 @@ export default {
   'sql.position': 'Zeile {line}, Zeichen {column}',
   'sql.error_status': 'Fehler {code} · {ms} ms',
   'sql.busy': 'Erst die laufende Abfrage abwarten oder abbrechen.',
+  // The empty editor. It used to do nothing at all — no status, no error,
+  // and a Run button that looks broken to the one person most likely to press
+  // it, which is somebody who has just opened the page (HANDOFF §19).
+  'sql.empty': 'Noch nichts zum Ausführen — schreib eine Abfrage in den Editor.',
   'sql.foreign_loaded': 'Abfrage eingefügt — zum Ausführen auf «Ausführen» klicken.',
   'sql.refused': 'Die Anfrage wurde abgelehnt.',
   'sql.cancel_failed': 'Abbruch fehlgeschlagen.',
@@ -706,6 +710,11 @@ export default {
   // `demo.left` counts down in whole minutes. Seconds would be precise and
   // would also turn a banner nobody needs to watch into one that moves, and
   // the last minute says "gleich" rather than "0 Minuten" for the same reason.
+  // The label for the account itself. The pool's rows really are called
+  // "1 Gast" and "Lehrperson Demo" — a display name is data, so these are
+  // what the top bar shows instead (`accountLabel` in util.js).
+  'demo.as_student': 'Gast',
+  'demo.as_teacher': 'Demo-Lehrperson',
   'demo.left': 'Demo — noch {minutes} Minuten',
   'demo.soon': 'Demo — die Sitzung endet gleich',
   'demo.end': 'Beenden',

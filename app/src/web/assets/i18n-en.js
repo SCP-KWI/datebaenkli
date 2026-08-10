@@ -214,6 +214,7 @@ export default {
   'sql.position': 'Line {line}, character {column}',
   'sql.error_status': 'Error {code} · {ms} ms',
   'sql.busy': 'Wait for the running query, or cancel it first.',
+  'sql.empty': 'Nothing to run yet — write a query in the editor.',
   'sql.foreign_loaded': 'Query loaded — press Run to execute it.',
   'sql.refused': 'The request was refused.',
   'sql.cancel_failed': 'Cancelling did not work.',
@@ -621,6 +622,8 @@ export default {
   'error.csv_types_rejected':
     'Some values do not fit the chosen data types. Fix the types or the file.',
 
+  'demo.as_student': 'Guest',
+  'demo.as_teacher': 'Demo teacher',
   'demo.left': 'Demo — {minutes} minutes left',
   'demo.soon': 'Demo — this session ends in a moment',
   'demo.end': 'End now',

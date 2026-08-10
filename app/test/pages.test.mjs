@@ -64,8 +64,33 @@ test('pages: every page carries the Chalk head and a theme script', () => {
 
 const TOP_BAR_PAGES = ['home.html', 'sql.html', 'uebungen.html', 'lesson.html', 'roster.html'];
 
-/** Every page served out of `src/web`. The two auth pages have no top bar. */
-const PAGES = [...TOP_BAR_PAGES, 'login.html', 'password.html'];
+/**
+ * Every page served out of `src/web`. The two auth pages have no top bar, and
+ * `404.html` has no route either — the not-found handler sends it
+ * (`http/errors.ts`). It is in this list for the head check specifically: a 404
+ * that lost `theme.js` or the stylesheet is a raw-looking page again, which is
+ * the whole thing §19 was about.
+ */
+const PAGES = [...TOP_BAR_PAGES, 'login.html', 'password.html', '404.html'];
+
+/**
+ * The 404 is the one page in the app with no script of any kind.
+ *
+ * It is what a request that matched nothing gets, which includes every way the
+ * app can be half-broken — a bad deploy, an unpopulated `dist/web`, a proxy
+ * pointed somewhere wrong. A page that needed `/assets/*.js` to say "that
+ * address does not exist" would be silent in exactly the cases it exists for,
+ * and adding one is the obvious thing to do to it later.
+ */
+test('pages: the 404 needs no script but theme.js to render', () => {
+  const html = read('404.html').replace(/<!--[\s\S]*?-->/g, '');
+  const scripts = [...html.matchAll(/<script[^>]*>/g)].map((m) => m[0]);
+  assert.deepEqual(scripts, ['<script src="/assets/theme.js">']);
+  assert.ok(!/\son[a-z]+\s*=/.test(html), '404.html: inline handler');
+  assert.ok(!/\sstyle="/.test(html), '404.html: inline style');
+  // And a way out that is a plain link, for the same reason.
+  assert.ok(html.includes('href="/"'), '404.html: no link back to the app');
+});
 
 /** The `<nav class="topbar-actions">` block, verbatim. */
 function topBar(html) {

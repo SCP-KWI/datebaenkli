@@ -21,6 +21,7 @@ import { hintFor, renderHint } from '/assets/hints.js';
 import { apply, errorText, formats, load, paintCached, t, wireLanguageToggle } from '/assets/i18n.js';
 import { renderMarkdown } from '/assets/markdown.js';
 import {
+  accountLabel,
   confirmDialog,
   esc,
   json,
@@ -140,6 +141,12 @@ wireLanguageToggle($('lang'));
 // The demo countdown, if this session is a demo lease. `me.demo` is null for
 // every real account, so the call is unconditional (HANDOFF §9g).
 mountDemoBanner(me.demo, t);
+// Rewritten now that the catalogue is loaded, and only for a demo lease: the
+// early write above is what keeps the bar from being blank during `load()`,
+// and `accountLabel` needs a `t` that reads the account's own locale rather
+// than whatever `paintCached()` guessed. util.js says why a demo's name is
+// the one display name in the app that gets translated.
+if (me.demo) $('who').textContent = `${accountLabel(user, me.demo, t)} · ${user.username}`;
 mountVersion($('version'), (d) => formats().dateTime(d));
 
 // --- the editor --------------------------------------------------------------
@@ -566,7 +573,18 @@ function setRunning(value) {
 async function run() {
   if (running) return;
   const sql = editor.getValue();
-  if (!sql.trim()) return;
+  if (!sql.trim()) {
+    // Say so. This was a bare `return`, which makes the one button on the page
+    // do nothing at all for the one reader most likely to press it first —
+    // somebody who has just opened `/sql` and wants to know what Run does. A
+    // control that is silent is indistinguishable from a control that is broken.
+    //
+    // The status line rather than the result pane: nothing ran, so there is no
+    // result to replace, and clearing a previous query's grid would throw away
+    // the thing they were probably looking at.
+    $('status').textContent = t('sql.empty');
+    return;
+  }
 
   setRunning(true);
   editor.markError(null);

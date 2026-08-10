@@ -54,7 +54,14 @@ function page(name: string): string {
   }
 }
 
-export function registerPageRoutes(app: FastifyInstance): void {
+/**
+ * The pages, plus the one that has no route: `404.html` is served by the
+ * not-found handler (`http/errors.ts`) rather than from a URL of its own, so it
+ * is returned rather than registered. Reading it here keeps every page in the
+ * app coming off disk in one place, and through the same error message when the
+ * build is incomplete.
+ */
+export function registerPageRoutes(app: FastifyInstance): string {
   const pages: Record<string, string> = {
     '/login': page('login.html'),
     '/password': page('password.html'),
@@ -78,4 +85,6 @@ export function registerPageRoutes(app: FastifyInstance): void {
       reply.type('text/html; charset=utf-8').send(html),
     );
   }
+
+  return page('404.html');
 }

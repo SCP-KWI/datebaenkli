@@ -451,6 +451,30 @@ export function alertDialog({ title, body = '', okLabel }) {
 }
 
 /**
+ * The name to put in the top bar for the account looking at the page.
+ *
+ * Ordinarily `displayName`, which is a person's name and is never translated.
+ * A demo lease is the exception, and it is the reason this function exists: the
+ * pool's accounts are called "1 Gast" and "Lehrperson Demo" in `app_user`,
+ * because `services/demo.ts` creates them through the same `createStudents`
+ * every real account goes through and a display name is data. On the English
+ * page that read "1 Gast", which was reported as a translation gap and is one
+ * (HANDOFF §19) — it is not somebody's name, it is a label for a slot.
+ *
+ * Only the *own* name, deliberately. A demo teacher's roster shows "Muster
+ * Lena" and the rest of the fixture class, and those stay as they are: they are
+ * fictional people, and translating a name is a different mistake from
+ * translating a label.
+ *
+ * Takes `t` rather than importing `i18n.js`, like `mountDemoBanner` below and
+ * for the same reason — `login.js` imports this module and loads no catalogue.
+ */
+export function accountLabel(user, demo, t) {
+  if (!demo) return user.displayName;
+  return t(user.role === 'teacher' ? 'demo.as_teacher' : 'demo.as_student');
+}
+
+/**
  * The demo countdown (phase 10, HANDOFF §9g).
  *
  * A demo session stops after 30 minutes whether or not anyone is typing, and
