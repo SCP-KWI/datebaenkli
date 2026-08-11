@@ -6,7 +6,7 @@
  */
 
 import { apply, errorText, formats, load, paintCached, t } from '/assets/i18n.js';
-import { mountVersion, wireLogout, wireReveal } from '/assets/util.js';
+import { loginUrl, mountVersion, returnTarget, wireLogout, wireReveal } from '/assets/util.js';
 
 const form = document.getElementById('form');
 const error = document.getElementById('error');
@@ -33,7 +33,7 @@ const mePromise = fetch('/api/me').then((r) => (r.ok ? r.json() : null));
 await paintCached();
 
 const me = await mePromise;
-if (!me) location.href = '/login';
+if (!me) location.href = loginUrl();
 else {
   // Before the two lines below touch anything: `why` is one of the strings
   // apply() replaces, so loading the locale afterwards would overwrite the
@@ -73,7 +73,9 @@ form.addEventListener('submit', async (event) => {
       error.textContent = payload?.error ? errorText(payload.error) : t('password.failed');
       return;
     }
-    location.href = '/';
+    // `?next=`, forwarded here by `login.js` — not `form.next`, which is the new
+    // password. The two are unrelated and the names collide only on this screen.
+    location.href = returnTarget() ?? '/';
   } catch {
     error.textContent = t('error.offline');
   } finally {

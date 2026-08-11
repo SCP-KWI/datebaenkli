@@ -13,6 +13,7 @@ import {
   accountLabel,
   esc,
   json,
+  loginUrl,
   mountDemoBanner,
   mountNav,
   mountVersion,
@@ -38,7 +39,7 @@ const paintTheme = wireThemeToggle(byId('theme'), (dark) =>
 );
 
 const me = await mePromise;
-if (!me) location.href = '/login';
+if (!me) location.href = loginUrl();
 else if (me.user.mustChangePassword) location.href = '/password';
 else {
   const user = me.user;

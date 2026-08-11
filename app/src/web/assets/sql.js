@@ -25,6 +25,7 @@ import {
   confirmDialog,
   esc,
   json,
+  loginUrl,
   mb,
   mountDemoBanner,
   mountNav,
@@ -88,7 +89,7 @@ const me = await mePromise;
 // Falling through would run `me.user` on null and turn a redirect into a
 // TypeError, which is a blank page instead of the login form.
 if (!me) {
-  location.href = '/login';
+  location.href = loginUrl();
 } else if (me.user.mustChangePassword) {
   location.href = '/password';
 } else if (me.user.role === 'admin') {

@@ -10,7 +10,7 @@
  * one from.
  */
 
-import { json, mountVersion, wireReveal } from '/assets/util.js';
+import { json, mountVersion, returnTarget, withNext, wireReveal } from '/assets/util.js';
 
 // `de-CH` hardcoded, and it is the one place that is right: this page has
 // no account to read a locale from, and it is German-first by design. The
@@ -62,7 +62,15 @@ form.addEventListener('submit', async (event) => {
     }
     // A forced change is the server's rule; the redirect only saves the
     // user a dead end, it does not enforce anything.
-    location.href = payload.user.mustChangePassword ? '/password' : '/';
+    //
+    // `next` survives the detour through `/password` rather than being dropped
+    // at it, because the two are the same student on the same morning: an
+    // account handed out for an exam has `must_change_password` set, so the
+    // *first* time a deep link is ever followed is the one time this branch is
+    // taken. Dropping it here would mean the feature works for everyone except
+    // the case it was built for.
+    const next = returnTarget();
+    location.href = payload.user.mustChangePassword ? withNext('/password', next) : (next ?? '/');
   } catch {
     error.textContent = 'Keine Verbindung zum Server. / No connection to the server.';
   } finally {

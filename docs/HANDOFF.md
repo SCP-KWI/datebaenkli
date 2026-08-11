@@ -6052,3 +6052,106 @@ only a small dialog; the argument against it is not about the cost.
   `.dockerignore` allow-line (§0's four-places rule is about `docs/`, not this).
 - `test/query-caps.test.mjs` is the twelfth PGlite-free test file and adds no
   memory to the suite's peak.
+
+---
+
+## 20. `?next=` — a deep link that survives the sign-in — 0.11.4 (2026-08-11)
+
+Asked for while working out how to put Datebaenkli inside an **Exam.net** exam
+run under Safe Exam Browser. That investigation is §20a, because the answer is
+"change nothing", and the one-line change it *did* justify is §20b.
+
+### 20a. Exam.net cannot embed this app, and it must not be made able to
+
+Exam.net's default for an external resource is an `<iframe>` in the student
+view, and its own support article's answer is "the site must allow embedding".
+This app refuses, deliberately, in two places that already carry the argument:
+`server.ts`'s `frame-ancestors 'none'` (both policies) and `x-frame-options:
+DENY`. The comment above them is the reason, and it is the reason not to
+reverse this for Exam.net: **`SameSite=Lax` means a framed page keeps its
+session cookie**, so being frameable is being CSRF-able by whoever frames us.
+
+Making the embed work would have taken three changes, and the third defeats the
+other two anyway:
+
+1. `frame-ancestors https://exam.net`, and *removing* `X-Frame-Options` — its
+   `ALLOW-FROM` form is dead in every current browser, so there is no
+   allow-listing version of that header to keep.
+2. The session cookie to `SameSite=None; Secure`. That is one of exactly two
+   CSRF controls in the app; the `Content-Type: application/json` requirement
+   (`server.ts`) would then be carrying it alone.
+3. Third-party cookie blocking and storage partitioning. Having paid for 1 and
+   2, a cross-site iframe's cookies are blocked or partitioned anyway — the fix
+   for that is the Storage Access API, in a browser we do not control.
+
+**The route that works needs none of it.** Exam.net's *advanced SEB settings*
+open an external resource in its own SEB window instead of an iframe — a
+top-level navigation, so nothing above applies. The teacher adds the app's root
+URL as a resource, enables the advanced settings, and sets the restriction to
+"restricted to the specified domain". Two things make this app unusually easy in
+that mode, and both are worth knowing before someone re-opens the question:
+
+- Exam.net warns you must hand-add every URL a login flow touches (SSO,
+  redirects) as hidden resources. **We have none** — login is a same-origin POST
+  and nothing leaves the origin — so one domain entry covers the whole app.
+- It requires SEB on Windows/macOS/iOS. It does **not** work in Exam.net's own
+  macOS/iOS/Chromebook apps, and external resources are incompatible with Medium
+  lockdown mode entirely.
+
+Exam.net stores nothing a student does in an external resource, so grading goes
+through what phase 9 already built: `submit` in `services/exercise.ts`, and the
+per-class download in `routes/exercises.ts`.
+
+### 20b. The one thing that was actually missing
+
+The resource URL a teacher would *want* to paste is `/sql?uebung=<id>`. It did
+not survive: every page bounces an unauthenticated visitor to `/login`, and
+`login.js` landed every successful sign-in on `/` (or `/password`). The student
+then had to find the exercise again from the top bar — a small thing everywhere
+except in front of a class, in a browser with no address bar.
+
+Three functions in `util.js` — `loginUrl`, `returnTarget`, `withNext` — and the
+ten `location.href = '/login'` sites now go through the first of them.
+
+**`returnTarget` is the whole security surface and it is one rule: the target
+must resolve to this origin.** `new URL(raw, origin)` is what enforces it, and
+is why nothing there matches on strings: `//evil.example` and `/\evil.example`
+are both parsed as an *authority* under the WHATWG rules and come back with
+somebody else's origin, while sailing straight through the `startsWith('/')`
+check anyone would write first. That is an open redirect on the one page in this
+app where a user is about to type a password. `test/util.test.mjs` pins both,
+and they are the reason that block exists — every refused case still "works" in
+a browser, in the sense that the login succeeds and the page goes somewhere.
+
+Three deliberate non-participants, so a later reader does not "fix" them:
+
+- **`wireLogout`, and both of `mountDemoBanner`'s exits.** Someone leaving on
+  purpose; returning them to the page they left is the opposite of the ask.
+- **`session-guard.js`.** A duller reason — `util.js` imports it, so it cannot
+  import back. Its redirect stays a plain `/login`.
+- **`/password` as a *source*.** It is a waypoint, so `loginUrl()` there drops
+  the target rather than nesting one `next` inside another. A session that dies
+  on that page lands on `/`. As a *destination* it does forward the target, and
+  that is the case the feature was built for: an account handed out for an exam
+  has `must_change_password` set, so the first deep link a student ever follows
+  is the one that takes the detour.
+
+### 20c. For the next session
+
+- Undeployed. Front-end only: `util.js`, `login.js`, `password.js` and the five
+  page scripts. No migration, no server change, no new dependency.
+- `test/util.test.mjs` grows from one concern to two and stays PGlite-free, so
+  the suite's memory peak is unchanged.
+- `npm run typecheck` clean; `npm test` 370 pass / 0 fail / 92 skipped (the six
+  live suites, no cluster that day), 237 s — in line with §0's ~230 s.
+- **`npm` had to be reinstalled to run either**, and the reason is worth knowing
+  because it will recur: on Arch/Manjaro `nodejs` and `npm` are separate
+  packages, npm had been pulled in only as a *dependency* of an unrelated
+  package, and a `pacman -Rs` of that package swept it out along with
+  `node-gyp`, `semver` and `nodejs-nopt`. Node itself kept working, so it
+  presented as "npm is not on PATH". `sudo pacman -S npm`, then
+  `pacman -D --asexplicit nodejs npm` so the next sweep leaves both alone.
+- npm 12 blocks install scripts by default, so `npm ci` warns that esbuild's
+  `postinstall` was skipped. **Ignore it** — the platform binary arrives as an
+  optional dependency and `bundle:editor` works; approving the script is not
+  needed.

@@ -44,6 +44,7 @@ import {
   confirmDialog,
   esc,
   json,
+  loginUrl,
   mountDemoBanner,
   mountNav,
   mountVersion,
@@ -67,7 +68,7 @@ const get = async (url) => {
   const response = await fetch(url).catch(() => null);
   if (!response) return null;
   if (response.status === 401) {
-    location.href = '/login';
+    location.href = loginUrl();
     return null;
   }
   return response.ok ? response.json() : null;
@@ -84,7 +85,7 @@ async function send(url, options) {
   const response = await fetch(url, options).catch(() => null);
   if (!response) return [null, t('error.offline')];
   if (response.status === 401) {
-    location.href = '/login';
+    location.href = loginUrl();
     return [null, t('error.unauthenticated')];
   }
   const payload = await response.json().catch(() => null);
@@ -758,7 +759,7 @@ const paintTheme = wireThemeToggle($('theme'), (dark) =>
 
 me = await mePromise;
 if (!me) {
-  location.href = '/login';
+  location.href = loginUrl();
 } else if (me.user.mustChangePassword) {
   location.href = '/password';
 } else if (me.user.role === 'student') {

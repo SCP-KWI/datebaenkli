@@ -320,6 +320,87 @@ export function mountNav(role, path = location.pathname) {
 }
 
 /**
+ * Where a sign-in came from, so that it can go back there (0.11.4).
+ *
+ * The three functions below exist for one URL: `/sql?uebung=<id>`. It is the
+ * only deep link this app hands out — a teacher pastes it into a lesson, a
+ * message, or (the case that prompted this) an Exam.net external resource — and
+ * until now it survived exactly as far as the login page, because `login.js`
+ * landed every successful sign-in on `/`. The student then had to find the
+ * exercise again from the top bar, which is a small thing everywhere except in
+ * front of a class in a locked-down browser.
+ *
+ * **`returnTarget` is the whole security surface, and it is one rule: the target
+ * must resolve to this origin.** `new URL(raw, origin)` is what enforces it and
+ * why nothing here matches on strings — `//evil.example` and `/\evil.example`
+ * are both *parsed* as an authority by the WHATWG rules and come back with
+ * somebody else's origin, which a `startsWith('/')` check waves through. That is
+ * an open redirect on the one page in the app where a user is about to type a
+ * password, so it is worth the constructor rather than a regex.
+ *
+ * The `/api` and `/assets` refusal is not a security rule — both are same-origin
+ * and neither is harmful to land on. It is that a sign-in ending on a JSON blob
+ * reads as a broken login, and nothing here emits one, so a `next` naming one
+ * did not come from this app.
+ */
+const NO_RETURN = new Set([
+  // Where a login lands anyway; a `next` naming it is a no-op.
+  '/',
+  // Naming the login page from the login page is a loop.
+  '/login',
+  // A waypoint, not a destination. What is worth remembering here is the target
+  // it was already carrying, not this page — and threading that through costs
+  // more than it buys, so a session that dies *on* `/password` loses the deep
+  // link and lands on `/`. One click, on a path nobody walks.
+  '/password',
+]);
+
+/** `/login` → `/login?next=%2Fsql%3Fuebung%3D3`, or unchanged when there is nothing to remember. */
+export function withNext(path, next) {
+  return next ? `${path}?next=${encodeURIComponent(next)}` : path;
+}
+
+/**
+ * The URL to bounce someone to when they have no valid session.
+ *
+ * Every "you are not signed in" redirect in the front end goes through this, so
+ * that the rule about what is worth remembering lives in one place. The three
+ * that deliberately do *not*: `wireLogout` and both of `mountDemoBanner`'s exits
+ * are someone leaving on purpose, and sending them back to the page they left is
+ * the opposite of what they asked for. `session-guard.js` is a fourth, for a
+ * duller reason — `util.js` imports it, so it cannot import this back.
+ */
+export function loginUrl(here = location.pathname + location.search) {
+  const [path] = here.split('?');
+  return withNext('/login', NO_RETURN.has(path) ? null : here);
+}
+
+/**
+ * The validated `?next=` this page was reached with, or `null`.
+ *
+ * The arguments have defaults rather than being read from `location` directly so
+ * that `test/util.test.mjs` can reach the one thing here that is worth a test.
+ */
+export function returnTarget(search = location.search, origin = location.origin) {
+  const raw = new URLSearchParams(search).get('next');
+  if (raw === null) return null;
+
+  let url;
+  try {
+    url = new URL(raw, origin);
+  } catch {
+    return null;
+  }
+  // Also catches `javascript:` and friends, whose origin is the string "null".
+  if (url.origin !== origin) return null;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/assets/')) return null;
+
+  // Not `url.href`: a same-origin absolute is a legal `next`, and following it
+  // as one would leave the app's own links looking different from each other.
+  return url.pathname + url.search;
+}
+
+/**
  * Sign out. One implementation, because the wrong copy of it is silent.
  *
  * It lived in `home.js` while the button was on one page. Now it is on every

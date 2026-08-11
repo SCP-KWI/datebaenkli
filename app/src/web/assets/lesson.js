@@ -16,6 +16,7 @@
 import { apply, formats, load, paintCached, t, wireLanguageToggle } from './i18n.js';
 import {
   esc,
+  loginUrl,
   mb,
   mountDemoBanner,
   mountNav,
@@ -49,7 +50,7 @@ const get = async (url) => {
   const response = await fetch(url).catch(() => null);
   if (!response) return null;
   if (response.status === 401) {
-    location.href = '/login';
+    location.href = loginUrl();
     return null;
   }
   return response.ok ? response.json() : null;
@@ -254,7 +255,7 @@ const paintTheme = wireThemeToggle($('theme'), (dark) =>
 );
 
 const me = await mePromise;
-if (!me) location.href = '/login';
+if (!me) location.href = loginUrl();
 else if (me.user.role === 'student') location.href = '/sql';
 if (!me || me.user.role === 'student') await new Promise(() => {});
 
