@@ -170,6 +170,22 @@ check "a student reads their own workspace"      200 -b "$S" "$B/api/workspace"
 echo "$(json '.quota.quotaBytes')" | grep -qE '^[1-9][0-9]*$' \
   && { echo "  PASS  the workspace states a quota limit"; PASS=$((PASS+1)); } \
   || { echo "  FAIL  the workspace has no quota limit in it"; FAIL=$((FAIL+1)); }
+# The class grouping (0.13.0) rides on the same composed response, and the half
+# worth checking here is the *negative* one: a student must get an empty array.
+# It is empty because the route declines to ask, so a refactor that drops the
+# role guard and lets the query run for everyone still passes — the query is
+# scoped by teacher_id and answers nothing either way. What this catches is the
+# opposite mistake, a grouping built from something other than "classes I teach".
+echo "$(json '.classes.length')" | grep -q '^0$' \
+  && { echo "  PASS  a student's workspace carries no class groups"; PASS=$((PASS+1)); } \
+  || { echo "  FAIL  a student's workspace carries class groups"; FAIL=$((FAIL+1)); }
+check "a teacher reads their own workspace"      200 -b "$T" "$B/api/workspace"
+# `.map(...)` and let the shell match, rather than a string literal inside the
+# node program: `json()` interpolates into a double-quoted `node -e`, so a
+# quoted comparison there has to survive two levels of quoting and does not.
+echo "$(json '.classes.map(c=>c.code)')" | grep -q "v$SFX" \
+  && { echo "  PASS  the teacher's workspace groups their own class"; PASS=$((PASS+1)); } \
+  || { echo "  FAIL  the teacher's workspace does not group their class"; FAIL=$((FAIL+1)); }
 check "an admin has no workspace to read"        403 -b "$A" "$B/api/workspace"
 
 echo "=== malformed input is a 4xx, never a 500 ==="

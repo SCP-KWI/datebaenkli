@@ -1295,6 +1295,30 @@ body[data-page='sql'] #browser summary {
   padding: 0.12rem 0;
   border-radius: var(--r-sm);
 }
+/* Class groups in the tree (0.13.0), and the only two-level fold in the app.
+
+   A teacher with three classes had every student's playground *and* every
+   exercise workspace in one flat list — 200-odd `<details>` before the one
+   they wanted. The group is a plain nested `<details>`, so the keyboard and
+   the screen reader get it for free and there is no widget to maintain.
+
+   Both rules are child-scoped (`>`) rather than descendant, so they style this
+   group's own summary and the schemas directly under it and nothing deeper. A
+   third level would then arrive unstyled and visibly wrong, which is the point:
+   whoever adds one should have to decide what it looks like rather than inherit
+   an indent that happens to apply. */
+body[data-page='sql'] #browser details.klasse > summary {
+  font-weight: 600;
+  color: var(--muted);
+}
+body[data-page='sql'] #browser details.klasse > details {
+  margin-left: 0.7rem;
+}
+/* The count beside a class name. `.est` everywhere else annotates a thing the
+   reader is already looking at, which is exactly what this does. */
+body[data-page='sql'] #browser details.klasse > summary .est::before {
+  content: '· ';
+}
 body[data-page='sql'] #browser .table {
   display: block;
   width: 100%;

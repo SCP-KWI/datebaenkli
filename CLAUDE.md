@@ -306,7 +306,7 @@ The live suite needs a throwaway cluster — the exact commands are in
 dev machine, and a deletion correctly refuses to drop a schema it could not dump.
 
 `db/verify-isolation.sh` (44 checks, SQL sequences) and `db/verify-auth.sh`
-(108 checks, HTTP against a running app) are the end-to-end nets. Run both after
+(111 checks, HTTP against a running app) are the end-to-end nets. Run both after
 touching auth or provisioning.
 
 The isolation script covers **exercise workspaces** since phase 9, and it needed

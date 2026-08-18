@@ -340,6 +340,118 @@ test('a student in two classes is visible to both teachers', async () => {
   assert.equal((await classes.addMembers(db, prov, adminId, second.id, [student.id])).added, 0);
 });
 
+// --- the schema browser's class groups (0.13.0) ------------------------------
+//
+// `schemaGroupsFor` only decides where a schema sits in the tree, never whether
+// it is shown — `services/catalog.ts` answers that, as the caller, from
+// Postgres. So what these cases pin is arrangement: which names land in which
+// group, in what order, and whose names never appear at all.
+
+/** A workspace row without going through the exercise service, which is not what is under test. */
+async function fakeWorkspace(db, teacherId, userId, schema) {
+  await db.query(
+    `INSERT INTO exercise (teacher_id, title) VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [teacherId, 'Bestellungen'],
+  );
+  await db.query(
+    `INSERT INTO exercise_workspace (exercise_id, user_id, schema_name)
+     VALUES ((SELECT max(id) FROM exercise), $1, $2)`,
+    [userId, schema],
+  );
+}
+
+test('a class group carries its students, playground before exercise workspaces', async () => {
+  const { db, teacher, klass } = await withClass();
+  const [{ user: lena }, { user: tim }] = await users.createStudents(
+    db,
+    prov,
+    teacher.id,
+    klass.id,
+    [
+      { firstName: 'Lena', lastName: 'Muster' },
+      { firstName: 'Tim', lastName: 'Meier' },
+    ],
+  );
+  await fakeWorkspace(db, teacher.id, lena.id, `x1_${lena.pgRole}`);
+
+  const groups = await classes.schemaGroupsFor(db, teacher.id);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].code, 'k3a');
+  assert.equal(groups[0].name, 'Klasse 3a');
+  // Lena's two entries are adjacent and her playground leads. Sorting by name
+  // would put `x1_u_…` after every `u_…` and scatter one student across the
+  // group, which is the thing this feature exists to stop.
+  assert.deepEqual(groups[0].schemas, [tim.pgRole, lena.pgRole, `x1_${lena.pgRole}`]);
+});
+
+test('a student in two of the same teacher’s classes appears under both', async () => {
+  // Deliberate: a class in the tree has to agree with the same class on /roster,
+  // and a teacher looking for Lena in K4b must find her there.
+  const { db, adminId, teacher, klass } = await withClass();
+  const second = await classes.createClass(db, adminId, {
+    code: 'k4b',
+    name: 'Klasse 4b',
+    teacherId: teacher.id,
+  });
+  const [{ user: lena }] = await users.createStudents(db, prov, teacher.id, klass.id, [
+    { firstName: 'Lena', lastName: 'Muster' },
+  ]);
+  await classes.addMembers(db, prov, teacher.id, second.id, [lena.id]);
+
+  const groups = await classes.schemaGroupsFor(db, teacher.id);
+  assert.deepEqual(
+    groups.map((g) => [g.code, g.schemas]),
+    [
+      ['k3a', [lena.pgRole]],
+      ['k4b', [lena.pgRole]],
+    ],
+  );
+});
+
+test('grouping shows a teacher nothing but their own classes, and a student nothing at all', async () => {
+  const { db, adminId, teacher, klass } = await withClass();
+  const { user: other } = await users.createTeacher(db, prov, adminId, {
+    firstName: 'Anna',
+    lastName: 'Beispiel',
+  });
+  const [{ user: lena }] = await users.createStudents(db, prov, teacher.id, klass.id, [
+    { firstName: 'Lena', lastName: 'Muster' },
+  ]);
+
+  assert.deepEqual(await classes.schemaGroupsFor(db, other.id), []);
+  // Not a special case in the code — the query is scoped by `teacher_id`, so an
+  // id that teaches nothing selects nothing. The route skips the call for a
+  // student to save the round trip, not to get a different answer.
+  assert.deepEqual(await classes.schemaGroupsFor(db, lena.id), []);
+});
+
+test('a deleted student leaves their class group, an archived one stays in it', async () => {
+  // The tree keeps showing an archived student: they still own their schema and
+  // a teacher still reads it. Deletion drops the role, so a group that still
+  // listed them would point at a schema Postgres no longer returns.
+  const { db, adminId, teacher, klass } = await withClass();
+  const [{ user: lena }, { user: tim }] = await users.createStudents(
+    db,
+    prov,
+    teacher.id,
+    klass.id,
+    [
+      { firstName: 'Lena', lastName: 'Muster' },
+      { firstName: 'Tim', lastName: 'Meier' },
+    ],
+  );
+
+  await users.setUserState(db, prov, adminId, lena.id, 'archived');
+  assert.deepEqual((await classes.schemaGroupsFor(db, teacher.id))[0].schemas, [
+    tim.pgRole,
+    lena.pgRole,
+  ]);
+
+  await users.setUserState(db, prov, adminId, tim.id, 'deleted');
+  assert.deepEqual((await classes.schemaGroupsFor(db, teacher.id))[0].schemas, [lena.pgRole]);
+});
+
 test('a student cannot be removed from their only class', async () => {
   // Otherwise the account is reachable by nobody but an admin: in no roster,
   // so not restorable and not resettable, yet still owning a schema.

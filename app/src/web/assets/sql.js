@@ -435,55 +435,140 @@ const schemaLabel = (name) => {
   return found ? t('ex.schema_label', { title: found.title }) : name;
 };
 
+/**
+ * Which `<details>` in the tree are open, by key, across re-renders.
+ *
+ * `renderTree()` rebuilds `innerHTML` wholesale and it is called after **every**
+ * execution (see `loadCatalog`'s caller), so without this the tree snaps back to
+ * its default fold on every Ctrl+Enter. That was survivable while the default
+ * was "my own schema open, the rest closed" and a teacher's tree was a flat
+ * list. It is not survivable with class groups: open a class, click a student's
+ * table, run it — and the group you were working in closes under you.
+ *
+ * Deliberately in memory and not `localStorage`. What it is worth remembering
+ * is "the fold I set thirty seconds ago", and a lesson computer is shared —
+ * persisting one teacher's open classes into the next person's session is a
+ * worse bug than forgetting them on reload.
+ */
+const foldState = new Map();
+
+/**
+ * One delegated listener for the whole tree, in the **capture** phase.
+ *
+ * `toggle` does not bubble, so a listener attached here in the normal phase
+ * would never fire. The alternative is a handler per `<details>`, re-attached
+ * on every render — which is the cost this whole arrangement exists to avoid.
+ */
+$('tree').addEventListener(
+  'toggle',
+  (event) => {
+    const key = event.target?.dataset?.key;
+    if (key !== undefined) foldState.set(key, event.target.open);
+  },
+  true,
+);
+
+/**
+ * `<details>` markup with its fold remembered.
+ *
+ * A **map** rather than a set of open keys, and that is the whole subtlety: a
+ * node the reader deliberately *closed* has to be distinguishable from one they
+ * have never seen, or every re-render would re-open their own schema behind
+ * them. `fallback` therefore only decides the first time a key appears.
+ */
+const foldable = (key, fallback, summary, body, cls = '') =>
+  `<details data-key="${esc(key)}"${(foldState.has(key) ? foldState.get(key) : fallback) ? ' open' : ''}${
+    cls ? ` class="${cls}"` : ''
+  }>${summary}${body}</details>`;
+
 function renderTree() {
   $('tree').className = '';
-  $('tree').innerHTML = catalog.schemas
-    .map((schema) => {
-      const tables = schema.tables
-        .map((table) => {
-          const columns = table.columns
-            .map((c) => `${esc(c.name)} <span class="est">${esc(c.type)}</span>`)
-            .join('<br />');
-          const rows =
-            table.estimatedRows === null
-              ? ''
-              : ` <span class="est">≈ ${number.format(table.estimatedRows)}</span>`;
-          const suffix = table.kind === 'table' ? '' : ` <span class="est">${esc(table.kind)}</span>`;
-          return `<button class="table" data-schema="${esc(schema.name)}" data-table="${esc(table.name)}"
-                          title="${esc(t('sql.table_title'))}">${esc(table.name)}${suffix}${rows}</button>
-                  <div class="cols">${columns || `<em>${esc(t('sql.no_columns'))}</em>`}</div>`;
-        })
-        .join('');
+  /**
+   * A teacher's schemas, grouped into the classes they teach — the feature this
+   * whole block exists for. Three classes of 25, each student with a playground
+   * and two exercise workspaces, is 225 entries in one flat list.
+   *
+   * The grouping is applied to whatever `catalog.schemas` actually holds and
+   * never the other way round: `catalog.classes` is a *seating plan*, and a
+   * name in it that Postgres did not return simply does not appear.
+   * `services/classes.ts` makes the same point from the server's end.
+   *
+   * A schema listed by two of this teacher's classes renders under both, which
+   * is that function's decision and not a bug to fix here. Both copies share a
+   * fold key, so opening the student under one class opens them under the other
+   * — which is what "this student's schema is open" ought to mean, and is the
+   * reason the key is the schema name rather than the position in the tree.
+   */
+  const grouped = new Set((catalog.classes ?? []).flatMap((c) => c.schemas));
+  const byName = new Map(catalog.schemas.map((s) => [s.name, s]));
 
-      /**
-       * An empty schema says different things depending on whose it is, and
-       * getting this wrong was a real complaint from a real lesson.
-       *
-       * `sql.no_tables` invites the reader to run `CREATE TABLE`, which is only
-       * true of the schema they **own**. It was being shown for every empty
-       * schema — including `public`, where `db/init/00-bootstrap.sh` does
-       * `REVOKE CREATE ON SCHEMA public FROM PUBLIC` and hands ownership to
-       * `dbk_app`. So the app was telling a student to run a statement that
-       * Postgres would refuse.
-       *
-       * Note the rule is ownership, not role: a *teacher* cannot create in
-       * `public` either, and neither can anyone in `demo` or in another
-       * student's schema. `schema.own` is the only thing that answers it.
-       */
-      const empty = schema.own ? 'sql.no_tables' : 'sql.no_tables_readonly';
+  const ungrouped = catalog.schemas.filter((s) => !grouped.has(s.name)).map(renderSchema);
 
-      // The caller's own schema is the one they came here for; a teacher's
-      // list of student schemas stays collapsed.
-      // The label is the exercise's title where there is one; the real schema
-      // name goes in the tooltip, because it is what a student has to type to
-      // qualify a table and `x7_u_k3a_muster_lena` is not a guessable string.
-      return `<details${schema.own ? ' open' : ''}>
-                <summary title="${esc(schema.name)}">${esc(schemaLabel(schema.name))}</summary>${
-                  tables || `<p class="empty">${esc(t(empty))}</p>`
-                }
-              </details>`;
+  const classes = (catalog.classes ?? []).map((klass) => {
+    const schemas = klass.schemas.filter((name) => byName.has(name));
+    // A class whose students are all archived, or whose only member left, has
+    // nothing to show. An empty fold is furniture that says nothing.
+    if (schemas.length === 0) return '';
+    const label = `${klass.code} — ${klass.name}`;
+    return foldable(
+      `class:${klass.code}`,
+      false,
+      `<summary title="${esc(t('sql.class_title', { code: klass.code }))}">${esc(label)}
+         <span class="est">${number.format(schemas.length)}</span></summary>`,
+      schemas.map((name) => renderSchema(byName.get(name))).join(''),
+      'klasse',
+    );
+  });
+
+  $('tree').innerHTML = [...ungrouped, ...classes].join('');
+}
+
+function renderSchema(schema) {
+  const tables = schema.tables
+    .map((table) => {
+      const columns = table.columns
+        .map((c) => `${esc(c.name)} <span class="est">${esc(c.type)}</span>`)
+        .join('<br />');
+      const rows =
+        table.estimatedRows === null
+          ? ''
+          : ` <span class="est">≈ ${number.format(table.estimatedRows)}</span>`;
+      const suffix = table.kind === 'table' ? '' : ` <span class="est">${esc(table.kind)}</span>`;
+      return `<button class="table" data-schema="${esc(schema.name)}" data-table="${esc(table.name)}"
+                      title="${esc(t('sql.table_title'))}">${esc(table.name)}${suffix}${rows}</button>
+              <div class="cols">${columns || `<em>${esc(t('sql.no_columns'))}</em>`}</div>`;
     })
     .join('');
+
+  /**
+   * An empty schema says different things depending on whose it is, and getting
+   * this wrong was a real complaint from a real lesson.
+   *
+   * `sql.no_tables` invites the reader to run `CREATE TABLE`, which is only
+   * true of the schema they **own**. It was being shown for every empty
+   * schema — including `public`, where `db/init/00-bootstrap.sh` does
+   * `REVOKE CREATE ON SCHEMA public FROM PUBLIC` and hands ownership to
+   * `dbk_app`. So the app was telling a student to run a statement that
+   * Postgres would refuse.
+   *
+   * Note the rule is ownership, not role: a *teacher* cannot create in
+   * `public` either, and neither can anyone in `demo` or in another student's
+   * schema. `schema.own` is the only thing that answers it.
+   */
+  const empty = schema.own ? 'sql.no_tables' : 'sql.no_tables_readonly';
+
+  // The caller's own schema is the one they came here for, so it starts open;
+  // a teacher's list of student schemas starts collapsed. Only *starts* —
+  // `foldable` hands the decision to the reader from their first click on.
+  // The label is the exercise's title where there is one; the real schema name
+  // goes in the tooltip, because it is what a student has to type to qualify a
+  // table and `x7_u_k3a_muster_lena` is not a guessable string.
+  return foldable(
+    `schema:${schema.name}`,
+    schema.own,
+    `<summary title="${esc(schema.name)}">${esc(schemaLabel(schema.name))}</summary>`,
+    tables || `<p class="empty">${esc(t(empty))}</p>`,
+  );
 }
 
 /**

@@ -283,10 +283,33 @@ the tree would hand every student a list of every other student's tables:
   ]}
 ```
 
-A student sees their own schema, `demo` and `public`; a teacher additionally
-sees the schema of every student they teach. **A schema with nothing readable in
-it is still listed, empty** — for a teacher, "this student has no tables yet"
-and "I have lost my grant on this student" must not render as the same thing.
+A student sees their own schema, `demo`, `tonspur` and `public`; a teacher
+additionally sees the schema of every student they teach. **A schema with
+nothing readable in it is still listed, empty** — for a teacher, "this student
+has no tables yet" and "I have lost my grant on this student" must not render as
+the same thing.
+
+**`classes` (0.13.0) is a seating plan, not an access list.** For a teacher the
+response also carries
+
+```json
+"classes": [
+  { "code": "k3a", "name": "Klasse 3a",
+    "schemas": ["u_k3a_meier_tim", "u_k3a_muster_lena", "x1_u_k3a_muster_lena"] }
+]
+```
+
+so the browser can fold the tree per class — a teacher of three classes has
+their students' playgrounds *and* one exercise workspace per student per
+exercise in one flat list. It says where a name goes, never whether it may be
+seen: `schemas` here is matched against the tree above, and a name the catalog
+did not return is not rendered. For a student the array is empty, and the route
+does not run the query at all.
+
+A student in two of the same teacher's classes appears under **both** —
+deliberately, so a class in the tree agrees with the same class on `/roster`.
+Playgrounds come before that student's exercise workspaces, and the array is
+ordered so one student's entries are adjacent.
 
 `estimatedRows` is the planner's estimate (`pg_class.reltuples`) and is `null`
 when Postgres has none, which is the case for every table until it is analysed.

@@ -226,6 +226,7 @@ export default {
   'sql.no_columns': 'no columns',
   'sql.no_tables': 'No tables yet. Create one with CREATE TABLE.',
   'sql.no_tables_readonly': 'No tables.',
+  'sql.class_title': 'Class {code} — fold open or shut',
   'sql.quota': '{used} of {total} used',
   'sql.quota_full':
     '{used} of {total} used — full. Delete some tables or rows, or anything that writes ' +

@@ -244,6 +244,10 @@ export default {
   // Every other empty schema: `public`, `demo`, another student's. Nobody can
   // create in those, so this says what is there and stops.
   'sql.no_tables_readonly': 'Keine Tabellen.',
+  // Nur Lehrpersonen sehen das: die Klassenklappe im Tabellenbaum. Das Kürzel
+  // steht schon in der Zeile — der Titel sagt, dass die Zeile ein Schalter ist,
+  // was einem `<summary>` ohne Beschriftung sonst niemand ansieht.
+  'sql.class_title': 'Klasse {code} — auf- und zuklappen',
   // Under the tree, and deliberately undramatic: it is ambient information for
   // a student who is nowhere near the limit, and only becomes an instruction in
   // `sql.quota_full` below. `lesson.over_quota` is the teacher's wording for the

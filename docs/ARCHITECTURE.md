@@ -339,6 +339,13 @@ remove), bulk-create from a pasted name list, printable credential slips, and a
 **live lesson view**: who's connected, last statement, error rate. That live
 view is the feature I'd expect you to actually love during a lesson.
 
+A teacher's schema browser is the student one plus every schema they may read,
+which at three classes is a hundred-odd entries — playgrounds *and* one exercise
+workspace per student per exercise. Since 0.13.0 those are **folded per class**
+(`/api/workspace`'s `classes` field, HANDOFF §22). The grouping decides where a
+schema sits, never whether it is listed: that is still `services/catalog.ts`
+asking Postgres as the caller.
+
 **Admin** — teachers CRUD, global limits, disk usage per class, backup status.
 
 ### CSV upload

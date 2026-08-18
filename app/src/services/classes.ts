@@ -125,6 +125,79 @@ export async function listClasses(
   return rows;
 }
 
+/**
+ * One foldable group in the schema browser's tree: a class, and every schema in
+ * the teaching database that belongs to somebody in it.
+ *
+ * Read by `/api/workspace` and used for **arrangement only**. The list of
+ * schemas a caller may see still comes from `services/catalog.ts`, which asks
+ * Postgres as the caller — this says where in the tree each of those names
+ * goes, and a name here that the catalogue did not return is simply not
+ * rendered. That separation is the point: grouping must not be able to reveal a
+ * schema, only to move one.
+ */
+export interface SchemaGroup {
+  code: string;
+  name: string;
+  /** Schema names, playground first, then that student's exercise workspaces. */
+  schemas: string[];
+}
+
+/**
+ * The groups for one teacher: their classes, each carrying their students'
+ * schemas — playgrounds *and* exercise workspaces, because a teacher's tree
+ * holds one of the latter per student per exercise and those are exactly the
+ * entries that make it unusable at three classes.
+ *
+ * Scoped by `c.teacher_id = $1`, so it is teacher-shaped by construction: pass
+ * a student's id and it returns nothing at all, which is the right answer
+ * rather than a special case.
+ *
+ * **A student in two of this teacher's classes appears in both**, deliberately.
+ * The alternative — first group wins — makes a class roster in the tree
+ * disagree with the class roster on `/roster`, and the number a teacher knows
+ * is the second one. Two entries for one schema in a tree is a navigation aid;
+ * a missing student is a bug report.
+ *
+ * Archived classes are included for the same reason `memberRoles` uses
+ * `state <> 'deleted'`: an archived class can still hold live accounts, and a
+ * group with nothing visible in it never renders anyway.
+ */
+export async function schemaGroupsFor(q: Queryable, teacherId: number): Promise<SchemaGroup[]> {
+  const { rows } = await q.query<{ code: string; name: string; schema: string; own: boolean }>(
+    // LATERAL rather than a UNION of two nearly identical joins: the class and
+    // member half is written once, and the two kinds of schema a student owns
+    // are listed where the difference actually is. `own` orders the playground
+    // ahead of that student's exercise workspaces, which sorting by name would
+    // not — `x7_…` sorts after every `u_…`, scattering one student's entries
+    // across the whole group.
+    `SELECT c.code, c.name, s.schema, s.own
+       FROM class c
+       JOIN class_member cm ON cm.class_id = c.id
+       JOIN app_user u ON u.id = cm.user_id
+      CROSS JOIN LATERAL (
+              SELECT u.pg_role AS schema, true AS own
+        UNION ALL SELECT w.schema_name, false
+               FROM exercise_workspace w WHERE w.user_id = u.id
+      ) s
+      WHERE c.teacher_id = $1
+        AND u.role = 'student' AND u.state <> 'deleted' AND u.pg_role IS NOT NULL
+      ORDER BY c.state, lower(c.code), u.pg_role, s.own DESC, s.schema`,
+    [teacherId],
+  );
+
+  const groups = new Map<string, SchemaGroup>();
+  for (const row of rows) {
+    let group = groups.get(row.code);
+    if (!group) {
+      group = { code: row.code, name: row.name, schemas: [] };
+      groups.set(row.code, group);
+    }
+    group.schemas.push(row.schema);
+  }
+  return [...groups.values()];
+}
+
 export interface NewClass {
   code: string;
   name: string;

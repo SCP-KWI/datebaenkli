@@ -17,6 +17,7 @@ import type { Db } from '../db/query.js';
 import { currentUser, requireRole } from '../http/auth.js';
 import { asObject, bool, list, oneOf, optionalStr, str } from '../http/validate.js';
 import type { CatalogReader } from '../services/catalog.js';
+import { schemaGroupsFor, type SchemaGroup } from '../services/classes.js';
 import { COLUMN_TYPES, DELIMITERS } from '../services/csv.js';
 import type { ExerciseService } from '../services/exercise.js';
 import {
@@ -105,7 +106,26 @@ export function registerWorkspaceRoutes(
     } catch (err) {
       req.log.warn({ err }, 'exercise labels failed; serving the tree unlabelled');
     }
-    return { ...workspace, quota: usage, exercises };
+    // How the tree is *arranged*, not what is in it: a teacher of three classes
+    // has a hundred-odd schemas in one flat list, and this is what lets the
+    // browser fold them per class. On the same bargain as the two above — a
+    // failure costs the grouping, not the tree, and an ungrouped tree is
+    // exactly what shipped before 0.13.0.
+    //
+    // **Teachers only, and the guard is cost rather than access.**
+    // `schemaGroupsFor` is scoped by `teacher_id`, so a student calling it gets
+    // an empty array from the database itself. But this route runs after every
+    // execution for every student in the room, and a round trip that can only
+    // ever answer "nothing" is one the lesson pays for 25 times a minute.
+    let classes: SchemaGroup[] = [];
+    if (user.role === 'teacher') {
+      try {
+        classes = await schemaGroupsFor(db, user.id);
+      } catch (err) {
+        req.log.warn({ err }, 'class grouping failed; serving the tree flat');
+      }
+    }
+    return { ...workspace, quota: usage, exercises, classes };
   });
 
   /**

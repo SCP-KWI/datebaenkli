@@ -3,12 +3,18 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-08-18 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.12.0`** — §21, the Tonspur dataset: a second shared read-only
+is on **`0.13.0`** — §22, the schema browser folds per class. A teacher of three
+classes had 200-odd schemas in one flat list; they are now grouped into the
+classes they teach, one `<details>` each. **No migration**, so this deploy is
+§7's application-code-only shape.
+
+**`0.12.0` (§21) is deployed** — the Tonspur dataset: a second shared read-only
 schema in the teaching database, 11 tables and ~110 000 rows, generated from a
-CSV export by `app/tools/tonspur-sql.mjs`. **It carries a migration**
-(`teach/003_tonspur.sql`, and the *first* one this project has had in the
-**teach** database since phase 0) so the next deploy is §7's schema-change
-shape. §20 before it (`?next=`) and §19 before that are application code only.
+CSV export by `app/tools/tonspur-sql.mjs`. It carried a migration
+(`teach/003_tonspur.sql`, the first this project has had in the **teach**
+database since phase 0); §21f is the runbook that was followed and §21g what
+was verified. §20 before it (`?next=`) and §19 before that are application code
+only.
 
 Older front matter, kept because it is still what the deploy history says —
 §19, the second testing round: four fixes, one declined
@@ -3036,10 +3042,10 @@ deleting rows, the other pressing refresh.
 
 ### The standing numbers
 
-*(Current as of 0.12.0, 2026-08-18: **377 pass / 0 fail / 92 skipped** without a
-cluster in 291 s, **85 live pass / 0 fail** with one, `verify-isolation.sh`
-44/44 — §21g. Everything below is the older measurement and is kept for its
-method, which is what makes the numbers comparable at all.)*
+*(Current as of 0.13.0, 2026-08-18: **381 pass / 0 fail / 92 skipped** without a
+cluster, **85 live pass / 0 fail** with one, `verify-isolation.sh` 44/44 (§21g),
+`verify-auth.sh` 111/111 (§22e). Everything below is the older measurement and
+is kept for its method, which is what makes the numbers comparable at all.)*
 
 **`cd app && npm test`** — **314 tests** as of 7.2, ~165 s, of which the five
 live suites skip without a server. *(Phase 9 took this to 396 registered / 311
@@ -3550,19 +3556,26 @@ one `pacman -S postgresql` by the author.
 
 **What is in `/tmp/dbk` right now**, so the next session does not have to guess
 before deciding whether to wipe it: **a cluster built from scratch on
-2026-08-18 (§21g), still running on port 55432.** `00-bootstrap.sh` plus all
-five meta and all three teach migrations applied by hand with `psql -f` as
-`dbk_app` — the app was never started against it, so there is **no** admin
-account this time, and `verify-isolation.sh` and the six live suites have each
-been run and have each cleaned up after themselves. `datebaenkli` holds exactly
-`public`, `demo` and `tonspur`, and `pg_roles` holds no `u_*`, `t_*` or `vfy_*`
-role at all.
+2026-08-18, and this time it has a populated instance on it** — §22 needed one,
+because folding a tree per class cannot be judged without three classes in it.
+`00-bootstrap.sh`, then **the app itself** applied the migrations (see below for
+why that matters), then admin `admin` / `admin-neu-99999`, teacher
+`t_schaffner` / `lehrer-neu-12345`, three classes (`k3a`, `w2a`, `i4b`) with 4,
+3 and 2 students, and one exercise opened by one of them. Student passwords are
+whatever `POST /api/students/:id/password` last issued. `verify-auth.sh`'s own
+fixtures are soft-deleted by its teardown, as designed.
 
-So there is nothing here to preserve and nothing to collide with — wipe it
-freely, and note that a run of `verify-isolation.sh` is now safe against it
-rather than something that eats your fixtures. It is PostgreSQL **18.4**,
-which is a major ahead of the server's 17; that is fine for everything the
-suites check and is not a substitute for the boot log after a deploy.
+**The trap that cost a restart: migrations applied by hand with `psql -f` do
+not write the `_migrations` ledger**, so the app then tries to apply them again
+and dies on `type "app_role" already exists`. Either let the app migrate (what
+was done in the end) or backfill the ledger; `psql -f` is fine for *inspecting*
+a migration and not for standing an instance up.
+
+Nothing here is worth preserving — wipe it freely, and note that a run of
+`verify-isolation.sh` is safe against it rather than something that eats your
+fixtures. It is PostgreSQL **18.4**, a major ahead of the server's 17; that is
+fine for everything the suites check and is not a substitute for the boot log
+after a deploy.
 
 The previous occupant, kept because the account it describes is the reason
 `DBK_ENCRYPTION_KEY` gets pinned: 7.2's cluster held admin
@@ -6337,3 +6350,131 @@ machine's, not the server's 17):
 and anything at all on the server. Nothing here uses syntax newer than about
 PostgreSQL 9, so the risk is low rather than zero — but the deploy step that
 settles it is §21f (4), the boot log line, and it costs nothing to read.
+
+---
+
+## 22. The tree folds per class — 0.13.0 (2026-08-18)
+
+Reported by the author after the first lessons on the Tonspur release: a
+teacher's schema browser is unusable at three classes. It is not a rendering
+problem, it is arithmetic — three classes of 25 is 75 playgrounds, and phase 9
+added *one exercise workspace per student per exercise* on top, all of it in one
+flat alphabetical list. The schema you want is somewhere in the middle of two
+hundred.
+
+The tree now groups a teacher's student schemas into the classes they teach,
+each a fold. Everything else about the pane is unchanged, and **a student's tree
+is byte-for-byte what it was** — the grouping is teacher-shaped by construction,
+not by a branch in the renderer.
+
+### 22a. The grouping is a seating plan, and that is the security argument
+
+`services/classes.ts` grows one function, `schemaGroupsFor(db, teacherId)`,
+returning `[{ code, name, schemas }]`. `routes/workspace.ts` joins it onto the
+`/api/workspace` response the way the quota and the exercise labels already are
+— at the route, not inside the reader, for the reason that file's header
+already gives at length.
+
+**What the tree shows is still decided by `services/catalog.ts`, running as the
+caller, filtered by `has_schema_privilege`.** The groups only say where a name
+goes. The client applies them to `catalog.schemas` and never the other way
+round, so a name in a group that Postgres did not return is not rendered at
+all — grouping can move a schema, it cannot reveal one. Both ends carry that
+sentence, because it is the property that makes this feature boring.
+
+The query is scoped `WHERE c.teacher_id = $1`, so it is teacher-shaped without a
+role check: pass a student's id and it selects nothing. The route still skips
+the call for a student, and the comment there says the guard is **cost, not
+access** — `/api/workspace` runs after every execution for every student in the
+room, and a round trip that can only ever answer "nothing" is one the lesson
+pays for 25 times a minute.
+
+### 22b. Three decisions inside the query
+
+- **A student in two of the same teacher's classes appears under both.** The
+  alternative — first group wins — makes a class in the tree disagree with the
+  same class on `/roster`, and the roster is the number a teacher knows. Two
+  entries for one schema in a tree is a navigation aid; a missing student is a
+  bug report.
+- **Playground first, then that student's exercise workspaces, per student.**
+  Sorting the group by name would put every `x7_…` after every `u_…` and
+  scatter one student's entries across the whole class, which is the exact
+  problem being fixed. Hence the `ORDER BY … u.pg_role, s.own DESC` and the
+  LATERAL that produces `own` at all.
+- **Archived classes and archived students stay in.** Both still own schemas a
+  teacher still reads. Only `deleted` drops out, because deletion drops the
+  role, and a group naming a schema Postgres will never return is furniture.
+  A group with nothing visible in it does not render.
+
+### 22c. The fold had to be remembered, and that is the part with a trap in it
+
+`renderTree()` rebuilds `innerHTML` wholesale and runs after **every**
+execution. Without state, opening a class, clicking a student's table and
+running it closes the class under you — the feature would not survive its own
+first use.
+
+`foldState` is a **Map**, not a set of open keys, and that is the whole
+subtlety: a node the reader deliberately *closed* has to be distinguishable
+from one they have never seen, or every re-render re-opens their own schema
+behind them. The fallback (own schema open, everything else shut) therefore
+only decides the first time a key appears.
+
+The listener is delegated and **runs in the capture phase**, because `toggle`
+does not bubble. A handler per `<details>` is the obvious alternative and would
+have to be re-attached on every render, which is what this avoids.
+
+In memory, deliberately, not `localStorage`: what is worth remembering is the
+fold from thirty seconds ago, and a lesson computer is shared — persisting one
+teacher's open classes into the next person's session is the worse bug.
+
+### 22d. What it is made of
+
+- `services/classes.ts` — `schemaGroupsFor` and `SchemaGroup`.
+- `routes/workspace.ts` — the join, teacher-only, degrading to `[]` on error
+  exactly as the quota does. A failure costs the grouping, not the tree.
+- `assets/sql.js` — `foldState`, `foldable()`, `renderSchema()` split out of
+  `renderTree()`, and the grouping in `renderTree()` itself.
+- `assets/app.css` — four rules. The group is a plain nested `<details>`, so
+  the keyboard and the screen reader get it for free and there is no widget.
+- `assets/i18n-{de,en}.js` — one key, `sql.class_title`.
+- `docs/API.md` — the `classes` field, and the sentence about what it is not.
+
+**No migration, no new dependency, no schema change.** The deploy is §7's
+application-code-only shape.
+
+### 22e. Verified
+
+- `npm test` — **381 pass, 0 fail, 92 skipped** (the live suites, no cluster
+  pointed at that run). `services.test.mjs` gains four cases pinning the query:
+  which schemas land in which group and in what order, the two-classes-one-student
+  case, that another teacher and a student both get nothing, and that `deleted`
+  leaves a group while `archived` stays in it.
+- The live suites against the throwaway cluster: **85 pass, 0 fail**, 46 s.
+  Nothing here touches them; that is the point of running them.
+- `db/verify-auth.sh` — **111 passed, 0 failed** (was 108: one new request and
+  two new assertions). The student one is the negative case, and its comment
+  says what it does *not* catch: the array is empty because the route declines
+  to ask, so dropping the role guard still passes. What it catches is a grouping
+  built from something other than "classes I teach".
+
+  **The first version of that check failed, and the bug was in the check.**
+  `json()` interpolates its argument into a double-quoted `node -e`, so a string
+  literal inside the expression has to survive two levels of quoting and does
+  not. The fix is to `.map(c=>c.code)` and let `grep` do the matching — worth
+  knowing before writing the next assertion in that file, because the failure
+  reads as a broken route rather than a broken test.
+- **Driven in a browser** against the throwaway cluster, as a teacher with three
+  classes (4 + 3 + 2 students) and one exercise opened by one student: the
+  groups render with counts, the exercise workspace sits under its owner inside
+  the right class, a run leaves the open class open, a class the reader closed
+  stays closed across a re-render, dark mode is legible, and a student's tree is
+  unchanged and carries `classes: []`.
+
+### 22f. One thing left alone on purpose
+
+A *student's* exercise workspace still shows a teacher its raw schema name
+(`x1_u_k3a_muster_lena`) rather than the exercise title — `schemaLabel` only
+labels the caller's own. Fixing it means the server sending titles for other
+people's workspaces, which is a bigger change than the complaint warrants, and
+grouping has already made the name legible by putting it directly under the
+student it belongs to.
