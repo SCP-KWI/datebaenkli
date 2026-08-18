@@ -214,6 +214,15 @@ denied "Tim CANNOT modify demo data" vfy_tim "$TIM" datebaenkli \
    "UPDATE demo.kantone SET einwohner = 0"
 denied "Tim CANNOT create tables in demo" vfy_tim "$TIM" datebaenkli "CREATE TABLE demo.evil(x int)"
 
+# `tonspur` is a second shared schema with its own GRANT block, not more tables
+# in `demo` — so it needs its own three lines. A schema that is readable and
+# not writable is two separate facts, and the second one is the one nobody
+# notices is missing until a student drops the table the class is working on.
+ok "Tim reads tonspur.song" vfy_tim "$TIM" datebaenkli "SELECT count(*) FROM tonspur.song"
+denied "Tim CANNOT modify tonspur data" vfy_tim "$TIM" datebaenkli \
+   "UPDATE tonspur.song SET titel = 'x'"
+denied "Tim CANNOT drop a tonspur table" vfy_tim "$TIM" datebaenkli "DROP TABLE tonspur.song"
+
 echo
 echo "=== blast radius ==="
 denied "Tim CANNOT connect to the meta database" vfy_tim "$TIM" datebaenkli_meta "SELECT 1"

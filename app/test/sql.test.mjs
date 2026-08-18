@@ -89,6 +89,23 @@ async function fresh(target) {
 const freshMeta = () => fresh('meta');
 const freshTeach = () => fresh('teach');
 
+/**
+ * One teaching database, shared by the `tonspur:` tests below.
+ *
+ * Every one of them is read-only, and a PGlite instance holding the Tonspur
+ * data costs ~325 MB against ~230 MB without it (measured 2026-08-18) — six
+ * fresh ones would put half a gigabyte on this file's peak to prove nothing
+ * the first one does not. CLAUDE.md's note about `--test-concurrency=1` is why
+ * that number is worth caring about.
+ *
+ * **Not a replacement for `freshTeach()`**, and specifically not for
+ * 'demo: generated data is identical across deployments' — that test compares
+ * two independently built databases, and handing it the same one twice would
+ * leave it passing while testing nothing.
+ */
+let tonspurDb;
+const sharedTonspur = async () => (tonspurDb ??= await freshTeach());
+
 test('meta: schema creates the expected tables', async () => {
   const db = await freshMeta();
   const { rows } = await db.query(
@@ -290,5 +307,144 @@ test('demo: a representative lesson query works', async () => {
   assert.ok(rows.length > 0);
   for (const r of rows) {
     assert.ok(Number(r.schnitt) >= 1 && Number(r.schnitt) <= 6);
+  }
+});
+
+// --- tonspur -----------------------------------------------------------------
+//
+// `003_tonspur.sql` is generated from a CSV export (`tools/tonspur-sql.mjs`),
+// so what these tests are guarding is not the SQL — it parses, or layer 1 would
+// have said so. It is the half-dozen *properties of the data* the Lektionsreihe
+// is built on. Each one is something a well-meaning edit would remove while
+// making the dataset look tidier, and none of them shows up as an error: a
+// dataset with the hole filled in runs every query in the lesson and quietly
+// answers the wrong question.
+
+test('tonspur: row counts are as exported', async () => {
+  const db = await sharedTonspur();
+  const { rows } = await db.query(`
+    SELECT 'kuenstler' t, count(*)::int c FROM tonspur.kuenstler
+    UNION ALL SELECT 'album', count(*)::int FROM tonspur.album
+    UNION ALL SELECT 'song', count(*)::int FROM tonspur.song
+    UNION ALL SELECT 'genre', count(*)::int FROM tonspur.genre
+    UNION ALL SELECT 'song_genre', count(*)::int FROM tonspur.song_genre
+    UNION ALL SELECT 'nutzerin', count(*)::int FROM tonspur.nutzerin
+    UNION ALL SELECT 'wiedergabe', count(*)::int FROM tonspur.wiedergabe
+    UNION ALL SELECT 'playlist', count(*)::int FROM tonspur.playlist
+    UNION ALL SELECT 'playlist_song', count(*)::int FROM tonspur.playlist_song
+    UNION ALL SELECT 'pass', count(*)::int FROM tonspur.pass
+    UNION ALL SELECT 'scan', count(*)::int FROM tonspur.scan`);
+  assert.deepEqual(Object.fromEntries(rows.map((r) => [r.t, r.c])), {
+    kuenstler: 120,
+    album: 336,
+    song: 2644,
+    genre: 14,
+    song_genre: 5296,
+    nutzerin: 500,
+    wiedergabe: 77722,
+    playlist: 845,
+    playlist_song: 19364,
+    pass: 380,
+    scan: 3189,
+  });
+});
+
+test('tonspur: the one dangling reference is still dangling', async () => {
+  // The dataset's teaching point, and the reason the schema declares no foreign
+  // keys at all. Two ways to lose it, both of which look like an improvement:
+  // adding the constraints (the migration would then fail to load, loudly), and
+  // "fixing" the row (silent). The second is what this asserts.
+  const db = await sharedTonspur();
+  const { rows: fks } = await db.query(`
+    SELECT count(*)::int c
+      FROM pg_constraint co
+      JOIN pg_class cl ON cl.oid = co.conrelid
+      JOIN pg_namespace n ON n.oid = cl.relnamespace
+     WHERE n.nspname = 'tonspur' AND co.contype = 'f'`);
+  assert.equal(fks[0].c, 0, 'tonspur declares no FOREIGN KEYs, on purpose');
+
+  const { rows } = await db.query(`
+    SELECT s.id, s.album_id FROM tonspur.song s
+     WHERE NOT EXISTS (SELECT 1 FROM tonspur.album a WHERE a.id = s.album_id)`);
+  assert.deepEqual(rows, [{ id: 2644, album_id: 9999 }]);
+});
+
+test('tonspur: and nothing else dangles', async () => {
+  // Which is what makes the row above a lesson rather than a broken export. A
+  // second hole would make "find the orphan" ambiguous in front of a class.
+  const db = await sharedTonspur();
+  const { rows } = await db.query(`
+    SELECT
+      (SELECT count(*)::int FROM tonspur.album a
+        LEFT JOIN tonspur.kuenstler k ON k.id = a.kuenstler_id WHERE k.id IS NULL) AS album,
+      (SELECT count(*)::int FROM tonspur.wiedergabe w
+        LEFT JOIN tonspur.nutzerin n ON n.id = w.nutzerin_id WHERE n.id IS NULL) AS w_nutzerin,
+      (SELECT count(*)::int FROM tonspur.wiedergabe w
+        LEFT JOIN tonspur.song s ON s.id = w.song_id WHERE s.id IS NULL) AS w_song,
+      (SELECT count(*)::int FROM tonspur.playlist_song ps
+        LEFT JOIN tonspur.song s ON s.id = ps.song_id WHERE s.id IS NULL) AS ps_song,
+      (SELECT count(*)::int FROM tonspur.song_genre sg
+        LEFT JOIN tonspur.genre g ON g.id = sg.genre_id WHERE g.id IS NULL) AS sg_genre,
+      (SELECT count(*)::int FROM tonspur.scan sc
+        LEFT JOIN tonspur.pass p ON p.id = sc.pass_id WHERE p.id IS NULL) AS scan`);
+  assert.deepEqual(rows[0], {
+    album: 0, w_nutzerin: 0, w_song: 0, ps_song: 0, sg_genre: 0, scan: 0,
+  });
+});
+
+test('tonspur: the name pair is not a key, the benutzername is', async () => {
+  // The lesson on candidate keys stands on both halves. Three colliding pairs
+  // is few enough that a student can look at them and many enough that the
+  // collision is not a fluke of one row.
+  const db = await sharedTonspur();
+  const { rows } = await db.query(`
+    SELECT
+      (SELECT count(*)::int FROM (
+         SELECT 1 FROM tonspur.nutzerin GROUP BY vorname, nachname HAVING count(*) > 1) x) AS kollisionen,
+      (SELECT count(DISTINCT benutzername)::int FROM tonspur.nutzerin) AS benutzernamen`);
+  assert.equal(rows[0].kollisionen, 3);
+  assert.equal(rows[0].benutzernamen, 500, 'benutzername is the candidate key that works');
+});
+
+test('tonspur: the second source shares no key with the first', async () => {
+  // `pass` is the L12 record-linkage exercise: no id in common with `nutzerin`,
+  // so the only join available is the four-tuple — and it has to find enough
+  // rows to be worth doing.
+  const db = await sharedTonspur();
+  const { rows: cols } = await db.query(`
+    SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'tonspur' AND table_name = 'pass'
+       AND column_name LIKE '%nutzerin%'`);
+  assert.deepEqual(cols, [], 'pass must not gain a foreign key into nutzerin');
+
+  const { rows } = await db.query(`
+    SELECT count(*)::int c
+      FROM tonspur.pass p
+      JOIN tonspur.nutzerin n
+        ON n.vorname = p.vorname AND n.nachname = p.nachname
+       AND n.geburtsdatum = p.geburtsdatum AND n.plz = p.plz`);
+  assert.equal(rows[0].c, 260);
+});
+
+test('tonspur: a representative lesson query works', async () => {
+  // The four-table join the Lektionsreihe builds up to, plus the `abgebrochen`
+  // comparison that only means anything because `sekunden_gehoert` is allowed
+  // to fall short of `dauer_sek`.
+  const db = await sharedTonspur();
+  const { rows } = await db.query(`
+    SELECT k.name AS kuenstler,
+           count(*)::int AS wiedergaben,
+           count(*) FILTER (WHERE w.sekunden_gehoert < s.dauer_sek)::int AS abgebrochen
+      FROM tonspur.wiedergabe w
+      JOIN tonspur.song s      ON s.id = w.song_id
+      JOIN tonspur.album a     ON a.id = s.album_id
+      JOIN tonspur.kuenstler k ON k.id = a.kuenstler_id
+     GROUP BY k.name
+     ORDER BY wiedergaben DESC, k.name
+     LIMIT 5`);
+  assert.equal(rows.length, 5);
+  for (const r of rows) {
+    assert.ok(r.wiedergaben > 0);
+    assert.ok(r.abgebrochen > 0 && r.abgebrochen < r.wiedergaben);
   }
 });

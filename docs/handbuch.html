@@ -998,14 +998,19 @@ footer {
 <h3>Was du wissen solltest</h3>
 <ul>
   <li><strong>Du siehst die Datenbanken deiner Klasse, lesend.</strong> Im Tabellenbaum deines eigenen Editors erscheinen alle Bereiche deiner Lernenden, und <code>SELECT * FROM u_i3a_buehler_nino.pausenkiosk;</code> funktioniert. Schreiben kannst du dort nicht — und andere Lehrpersonen sehen deine Klassen gar nicht.</li>
-  <li><strong>Fremde Tabellen lesen geht nicht.</strong> Wer es versucht, bekommt eine Zugriffsverweigerung von PostgreSQL, nicht von der App. Das gilt auch für die Beispieldaten: <code>demo</code> darf gelesen, aber nicht verändert werden — der Versuch, die eigene schlechte Note dort wegzulöschen, scheitert also zuverlässig.</li>
+  <li><strong>Fremde Tabellen lesen geht nicht.</strong> Wer es versucht, bekommt eine Zugriffsverweigerung von PostgreSQL, nicht von der App. Das gilt auch für die Beispieldaten: <code>demo</code> und <code>tonspur</code> dürfen gelesen, aber nicht verändert werden — der Versuch, die eigene schlechte Note dort wegzulöschen, scheitert also zuverlässig.</li>
   <li><strong>Namen sind sichtbar, Daten nicht.</strong> Wer sucht, kann herausfinden, <em>dass</em> es andere Bereiche und Tabellen gibt. Lesen lässt sich darin keine einzige Zeile. Für den Unterricht ist das eher ein Anlass als ein Problem: Metadaten und Daten sind nicht dasselbe.</li>
   <li><strong>Zwei, die sich einig sind, können zusammenarbeiten.</strong> Wer will, kann seinen eigenen Bereich für eine andere Person freigeben — es ist der eigene, und PostgreSQL erlaubt das dem Eigentümer. Die App nimmt solche Freigaben bei ihren Aufräumläufen wieder weg und protokolliert sie. Als Abschreibweg taugt es also schlecht, aber rechne im Zweifel damit, dass zwei, die sich einig sind, es kurzzeitig können.</li>
   <li><strong>Die Beispieldaten sind nach Schweizer Regeln sortiert.</strong> <code>ORDER BY nachname</code> liefert Bühler, Küng, Rüegg an der richtigen Stelle statt hinter Zimmermann. Klingt nach einem Detail und ist die erste Abfrage, die eine Klasse ausführt.</li>
 </ul>
 
-<h3>Die Beispieldatenbank</h3>
-<p>Im Bereich <code>demo</code> liegen acht Tabellen mit Schweizer Bezug — Kantone, Gemeinden, Schülerinnen, Fächer, Noten, Artikel, Bestellungen, Bestellpositionen. Sie reichen für Verbunde, Gruppierungen, Unterabfragen und enthalten absichtlich eine verletzte Fremdschlüsselbeziehung, an der sich Integritätsbedingungen zeigen lassen. Lesbar für alle, veränderbar für niemanden.</p>
+<h3>Die Beispieldaten</h3>
+<p>Es sind zwei Bereiche, und sie haben verschiedene Aufgaben. Beide sind für alle lesbar und für niemanden veränderbar.</p>
+<ul>
+  <li><strong><code>demo</code> — acht kleine Tabellen mit Schweizer Bezug</strong>: Kantone, Gemeinden, Schülerinnen, Fächer, Noten, Artikel, Bestellungen, Bestellpositionen. Sie reichen für Verbunde, Gruppierungen und Unterabfragen und sind vor allem dafür da, dass in den ersten fünf Minuten etwas auf dem Bildschirm steht.</li>
+  <li><strong><code>tonspur</code> — elf Tabellen, rund 110 000 Zeilen</strong>: Künstlerinnen, Alben, Songs, Genres, Nutzerinnen, Wiedergaben, Playlists sowie Festivalpässe und deren Scans. Gedacht für eine ganze Lektionsreihe: n:m mit und ohne eigene Attribute, eine grosse Faktentabelle, ein Schlüsselkandidat, der funktioniert (<code>benutzername</code>) neben einem, der es nicht tut (Vor- und Nachname), und eine zweite Quelle ohne gemeinsamen Schlüssel.</li>
+</ul>
+<p><code>tonspur</code> hat <strong>absichtlich keine Fremdschlüssel-Bedingungen</strong>, und genau eine Beziehung ist verletzt: <code>song.album_id = 9999</code> zeigt auf ein Album, das es nicht gibt. Das ist der Aufhänger für referentielle Integrität — die Klasse findet die Zeile mit einem <code>LEFT JOIN</code>, bevor jemand <code>REFERENCES</code> geschrieben hat.</p>
 </section>
 
 <!-- ==================================================================== -->

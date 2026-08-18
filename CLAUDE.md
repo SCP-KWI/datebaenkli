@@ -60,6 +60,16 @@ builds no SQL at all, because `resetSchema`, `listWorkspaces` and `dropWorkspace
 already existed in `provision.ts`. Its header says so, and says what to do if an
 edit there ever wants to quote an identifier: the seam belongs in `provision.ts`.
 
+**`app/tools/tonspur-sql.mjs` (0.12.0) is not the third file, and the argument
+is where it runs.** It concatenates SQL freely — it writes a 4.9 MB migration
+full of `INSERT … VALUES` from a CSV export — but it runs on a developer's
+machine, never in the app, and its output is a checked-in `.sql` file that
+`migrate.ts` hashes and refuses to boot on if it changes. The precedent is
+`tools/vendor-fonts.mjs`: external input, committed output, not part of
+`npm run build`. **The line to hold is that nothing in `src/` reads a CSV at
+runtime**; the moment a "generator" is imported by the server it is a third
+builder and needs provision.ts's argument, not this one.
+
 Phase 9 is the shape to copy when that comes up. `services/exercise.ts` needed
 both hazards and became neither file: the schema, its drop and the teacher's
 grant went **into** `provision.ts` as new seams, and the CSV fixtures go through
@@ -245,7 +255,7 @@ production", which is what this line used to claim.
 
 ```bash
 cd app
-npm test          # build + all of the above; ~230 s, ~4.5 GB peak
+npm test          # build + all of the above; ~290 s, ~4.5 GB peak
 npm run typecheck
 ```
 
@@ -256,7 +266,10 @@ Postgres compiled to WASM, so the instances accumulate for the life of a file.
 Measured 2026-08-07: `services.test.mjs` 4.6 GB, `exercise.test.mjs` 4.6 GB,
 `sql.test.mjs` 4.3 GB, **each on its own**. Run in parallel they peaked at
 **9.4 GB** and OOM-killed a developer machine that was also running a browser.
-Serialised: **4.5 GB**, and the whole suite takes about 230 s.
+Serialised: **4.5 GB**, and the whole suite takes about 230 s — **290 s since
+0.12.0**, which is the Tonspur dataset's 110 000 rows being loaded into PGlite
+once per `freshTeach()`. Its peak did *not* move (measured both ways, HANDOFF
+§21d), so the flag's reason is unchanged; only the wall clock is.
 
 **Do not remove the flag to make the suite faster.** The wall-clock it buys back
 is real and so is the OOM. The actual fix is closing the PGlite instances, which
@@ -292,7 +305,7 @@ The live suite needs a throwaway cluster — the exact commands are in
 `DBK_ARCHIVE_DIR_CONTAINER`: it defaults to a path that does not exist on the
 dev machine, and a deletion correctly refuses to drop a schema it could not dump.
 
-`db/verify-isolation.sh` (41 checks, SQL sequences) and `db/verify-auth.sh`
+`db/verify-isolation.sh` (44 checks, SQL sequences) and `db/verify-auth.sh`
 (108 checks, HTTP against a running app) are the end-to-end nets. Run both after
 touching auth or provisioning.
 

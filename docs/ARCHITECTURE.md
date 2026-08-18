@@ -37,7 +37,7 @@ student could simply type `RESET ROLE;` into the editor and escape.
 |---|---|
 | **admin** (you) | Create/remove **teachers**, global limits & quotas, instance health, backups. Sees everything. |
 | **teacher** | Create/remove **classes** and **students** in their own classes. Read-only peek into their students' schemas. Reset a student's schema. Has their own playground schema for preparing material. Cannot see other teachers' classes. |
-| **student** | Own schema: full DDL/DML. Read-only access to shared `demo` data. Nothing else. |
+| **student** | Own schema: full DDL/DML. Read-only access to the shared `demo` and `tonspur` data. Nothing else. |
 
 ### PostgreSQL objects
 
@@ -48,6 +48,7 @@ cluster
 │
 └── datebaenkli           ← the teaching database
     ├── schema demo       ← shared, read-only, granted to PUBLIC
+    ├── schema tonspur    ← ditto (0.12.0). 11 tables, ~110 000 rows
     ├── schema u_k3a_muster_lena   owned by role u_k3a_muster_lena
     ├── schema u_k3a_meier_tim     owned by role u_k3a_meier_tim
     └── schema t_schaffner         owned by role t_schaffner  (teacher playground)
@@ -323,7 +324,7 @@ Postgres password, which is 32 random characters encrypted at rest
 ### Screens
 
 **Student** — one page, three panes:
-- Left: schema browser (their schema + `demo`), tables → columns → row counts,
+- Left: schema browser (their schema + `demo` + `tonspur`), tables → columns → row counts,
   click a table for `SELECT * LIMIT 50`
 - Top right: SQL editor (CodeMirror 6, Postgres dialect, autocomplete fed from
   their own catalog), ⌘↵ to run, Cancel button
@@ -365,12 +366,32 @@ are sent. `DateStyle` defaults to `ISO, MDY`, so `03.04.2025` handed over as
 written parses **without error** as 4 March; slash dates are left as `text`
 because nothing in the file disambiguates them. Contract in `docs/API.md`.
 
-### Shared `demo` schema
+### Shared read-only schemas
 
-Ships with a Swiss-flavoured example database so day one doesn't start with an
-empty screen: `kantone`, `gemeinden`, `schuelerinnen`, `noten`, `bestellungen`,
-`artikel` — enough for joins, aggregates, subqueries, and a deliberate
-foreign-key violation to demo constraints. Read-only, granted to PUBLIC.
+**Amended in place (0.12.0): there are two, and one sentence below was a plan
+the other never delivered.**
+
+`demo` ships with a Swiss-flavoured example database so day one doesn't start
+with an empty screen: `kantone`, `gemeinden`, `schuelerinnen`, `noten`,
+`bestellungen`, `artikel` — enough for joins, aggregates, subqueries, and a
+deliberate foreign-key violation to demo constraints. Read-only, granted to
+PUBLIC.
+
+**That last clause was never built.** Every foreign key in `demo` is declared
+and satisfied, and `test/sql.test.mjs` asserts there are no orphans — the
+sentence described an intention, and both handbooks had translated it into a
+claim about a dataset that did not have the property. It is kept here rather
+than deleted because it is what `tonspur` was then built to be.
+
+`tonspur` (0.12.0, `teach/003_tonspur.sql`) is the dataset for the
+Lektionsreihe "Relationale Datenbanken": 11 tables, ~110 000 rows, 11 MB.
+Künstler/Album/Song, an n:m without attributes (`song_genre`) beside one with
+them (`playlist_song`), a 77 000-row fact table (`wiedergabe`), a working
+candidate key next to a broken one, and a second source (`pass`, `scan`) that
+joins to the first only on Vorname + Nachname + Geburtsdatum + PLZ. It declares
+**no foreign keys at all**, and exactly one reference dangles
+(`song.album_id = 9999`) — that is the violation the paragraph above promised.
+Read-only, granted to PUBLIC, same shape as `demo`'s grants.
 
 ---
 

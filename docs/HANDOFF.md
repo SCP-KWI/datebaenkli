@@ -2,8 +2,16 @@
 
 Running state document. Update it at the end of every working session.
 
-**Last updated:** 2026-08-10 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.11.3`** — §19, the second testing round: four fixes, one declined
+**Last updated:** 2026-08-18 · **Phases 0–10 are DEPLOYED**; the repo
+is on **`0.12.0`** — §21, the Tonspur dataset: a second shared read-only
+schema in the teaching database, 11 tables and ~110 000 rows, generated from a
+CSV export by `app/tools/tonspur-sql.mjs`. **It carries a migration**
+(`teach/003_tonspur.sql`, and the *first* one this project has had in the
+**teach** database since phase 0) so the next deploy is §7's schema-change
+shape. §20 before it (`?next=`) and §19 before that are application code only.
+
+Older front matter, kept because it is still what the deploy history says —
+§19, the second testing round: four fixes, one declined
 with an argument, and one report that was a misreading of a working row cap but
 turned up a **real** hole underneath it (a single row could be any size, so one
 statement came back as a 95 MB response). §18 before it was the tab-bleed fix.
@@ -3028,6 +3036,11 @@ deleting rows, the other pressing refresh.
 
 ### The standing numbers
 
+*(Current as of 0.12.0, 2026-08-18: **377 pass / 0 fail / 92 skipped** without a
+cluster in 291 s, **85 live pass / 0 fail** with one, `verify-isolation.sh`
+44/44 — §21g. Everything below is the older measurement and is kept for its
+method, which is what makes the numbers comparable at all.)*
+
 **`cd app && npm test`** — **314 tests** as of 7.2, ~165 s, of which the five
 live suites skip without a server. *(Phase 9 took this to 396 registered / 311
 passing; the paragraph below is the 7.2 measurement and is kept for its
@@ -3536,17 +3549,24 @@ every live suite skip silently and the skip looks like a pass. If
 one `pacman -S postgresql` by the author.
 
 **What is in `/tmp/dbk` right now**, so the next session does not have to guess
-before deciding whether to wipe it: **a freshly built cluster with almost
-nothing in it.** 7.2 rebuilt it from scratch (the old one had been wiped with
-`/tmp`), ran `00-bootstrap.sh`, and let the app apply both migrations. It holds
-admin `admin/admin-neu-12345` and no other account: the teacher, class and
-student 7.2 created were deleted through the app's own lifecycle afterwards, and
-`db/verify-isolation.sh` removes its own three roles now (§4tt). `pg_roles` was
-checked directly and holds **no** `u_*` or `t_*` role at all.
+before deciding whether to wipe it: **a cluster built from scratch on
+2026-08-18 (§21g), still running on port 55432.** `00-bootstrap.sh` plus all
+five meta and all three teach migrations applied by hand with `psql -f` as
+`dbk_app` — the app was never started against it, so there is **no** admin
+account this time, and `verify-isolation.sh` and the six live suites have each
+been run and have each cleaned up after themselves. `datebaenkli` holds exactly
+`public`, `demo` and `tonspur`, and `pg_roles` holds no `u_*`, `t_*` or `vfy_*`
+role at all.
 
 So there is nothing here to preserve and nothing to collide with — wipe it
 freely, and note that a run of `verify-isolation.sh` is now safe against it
-rather than something that eats your fixtures.
+rather than something that eats your fixtures. It is PostgreSQL **18.4**,
+which is a major ahead of the server's 17; that is fine for everything the
+suites check and is not a substitute for the boot log after a deploy.
+
+The previous occupant, kept because the account it describes is the reason
+`DBK_ENCRYPTION_KEY` gets pinned: 7.2's cluster held admin
+`admin/admin-neu-12345` and nothing else.
 
 **Pin `DBK_ENCRYPTION_KEY` for the session anyway.** §6's start command below
 generates a fresh one with `openssl rand` on every restart, and 7.2 needed three
@@ -6155,3 +6175,165 @@ Three deliberate non-participants, so a later reader does not "fix" them:
   `postinstall` was skipped. **Ignore it** — the platform binary arrives as an
   optional dependency and `bundle:editor` works; approving the script is not
   needed.
+
+---
+
+## 21. The Tonspur dataset — 0.12.0 (2026-08-18)
+
+A second shared read-only schema in the teaching database, `tonspur`: 11 tables,
+~110 000 rows, the dataset that belongs to the Lektionsreihe "Relationale
+Datenbanken". It ships as one ordinary migration, `teach/003_tonspur.sql`, and
+**it is the first migration this project has ever added to the teach database** —
+every previous one was `meta/`. That matters for exactly one reason, and §7's
+runbook already covers it: the teach database keeps its own `_migrations` ledger
+and is not reached until meta finishes.
+
+### 21a. Why a schema of its own rather than more tables in `demo`
+
+`demo` is eight small Swiss tables whose job is that something is on the screen
+in the first five minutes. Tonspur is a 110 000-row dataset built for one
+Lektionsreihe. The two want opposite things from the table tree — `demo` wants
+to be short, this wants to be complete — and a student pays nothing for the
+split, because they are already typing `demo.kantone`.
+
+Nothing in the app needed changing for it to appear. `services/catalog.ts` is
+driven from `pg_namespace` filtered by `has_schema_privilege`, so a schema with
+`GRANT USAGE … TO PUBLIC` shows up in the tree by itself. The grants are
+`001_init.sql`'s, copied: USAGE and SELECT to PUBLIC plus `ALTER DEFAULT
+PRIVILEGES FOR ROLE dbk_app`, which is what makes a future table in this schema
+readable without anyone remembering to re-grant.
+
+### 21b. No FOREIGN KEYs, and that is the dataset
+
+`song.album_id = 9999` points at an album that does not exist. It is the
+teaching point — referential integrity gets *shown* to be missing before it is
+declared — and with the constraints in place the export would not load at all.
+
+Two ways to lose it, and only one of them is loud. Adding the constraints fails
+the migration; "fixing" the row does not fail anything, and every query in the
+lesson still runs. `test/sql.test.mjs` therefore asserts three things rather
+than one: that the schema declares **zero** FK constraints, that the dangling
+row is still `(2644, 9999)`, and that **nothing else** dangles — a second hole
+would make "find the orphan" ambiguous in front of a class. The same file pins
+the other properties the lessons stand on: three colliding Vorname/Nachname
+pairs against 500 distinct `benutzername`s, and 260 `pass` rows that match a
+`nutzerin` only on the four-tuple, because those two tables share no key.
+
+### 21c. The generator is not a third SQL-building file
+
+`app/tools/tonspur-sql.mjs` reads the CSV export and writes the migration.
+CLAUDE.md's rule is about SQL *this app* assembles at runtime from data it does
+not control; this runs on a developer's machine, its input is a fixed export,
+and its output is reviewed, checksummed by `migrate.ts` and immutable from the
+moment it is applied. The shape to compare it to is `tools/vendor-fonts.mjs`:
+external input, committed output, not part of `npm run build`.
+
+It still escapes every value in one function, and it **refuses rather than
+guesses** — a field that is not the type SPEC claims aborts the whole file
+instead of reaching the output quoted. The migration's header carries a sha256
+of each source CSV and its row count, which is the only provenance a repo
+without the CSVs can have.
+
+**The CSVs are deliberately not committed.** 4 MB of input beside 4.9 MB of
+generated output, to regenerate a file that may never be regenerated: once
+applied, `003_tonspur.sql` is a hash the database holds, and a corrected dataset
+is a *new* migration, not an edit to this one.
+
+### 21d. What it costs
+
+- `003_tonspur.sql` is 4.9 MB and 226 `INSERT` statements (500 rows each). The
+  whole file runs in one transaction under the migration advisory lock, like
+  every other migration.
+- Measured on the dev machine: **683 ms** to execute in PGlite. On a real
+  cluster expect the same order; it is not a deploy step that needs watching.
+- `test/sql.test.mjs` goes from **33 s to 41 s**, and its peak RSS does **not**
+  move (2.80 GB → 2.78 GB, i.e. unchanged within noise). The six new tests share
+  one PGlite instance rather than taking one each — they are all read-only, and
+  an instance holding this data costs ~325 MB against ~230 MB without it. That
+  helper is explicitly *not* a replacement for `freshTeach()`: 'demo: generated
+  data is identical across deployments' compares two independently built
+  databases, and handing it the same one twice would leave it green while
+  testing nothing.
+- On disk in a real cluster: **11 MB** for the schema including the seven
+  indexes, of which `wiedergabe` is 8 MB. `datebaenkli` goes from 8 MB to 19 MB
+  on an otherwise empty instance. Measured, not estimated — the first guess
+  written here was "25–35 MB" and it was wrong by a factor of three. The same
+  11 MB lands in every nightly `db/backup.sh` dump.
+
+### 21e. Both handbooks were wrong about the demo data, and now are not
+
+`handbuch.src.html` claimed `demo` "enthält absichtlich eine verletzte
+Fremdschlüsselbeziehung". It does not and never did — every FK in `demo` is
+declared and `test/sql.test.mjs` asserts there are no orphans. The sentence was
+describing a dataset that did not exist yet; it describes `tonspur` exactly, so
+it moved there rather than being deleted. The teacher's §12 now lists both
+schemas, and the student handbook's section 4 gains one paragraph pointing at
+`tonspur`.
+
+Both were rebuilt with `node docs/handbook-src/build.mjs`, which needs no
+`node_modules` — `check.mjs`/`shots.mjs` are the Puppeteer half and were not
+run, because no screenshot changed. The diff is 10 lines across the two
+generated files, which is the confirmation that the build is deterministic.
+
+### 21f. For the next session — deploying this
+
+**This is §7's schema-change shape.** In the order that settles things:
+
+1. `curl -s https://datebaenkli.schaffner.xyz/api/version` **first**, as always.
+2. `db/backup.sh` and its `--check`.
+3. `git pull`, `docker compose build datebaenkli-app`, `docker compose up -d`.
+   **`up` without `build` proves nothing** (§4vv).
+4. The boot log must say `applied migration 003_tonspur.sql`, and the teach
+   ledger must then read `teach 0 applied / 3 current` on a second boot
+   (`docker compose restart datebaenkli-app`) — `up -d` does not give you that.
+5. `curl /api/version` again: **both** fields move, to `0.12.0`.
+6. The one check specific to this release, run as a student rather than as
+   `postgres`, because what is being verified is the grant:
+
+   ```sql
+   SELECT count(*) FROM tonspur.wiedergabe;      -- 77722
+   UPDATE tonspur.song SET titel = 'x';          -- must be denied
+   ```
+
+   `db/verify-isolation.sh` has both as fixture checks now (three new lines in
+   the shared-data block), which is the version that does not need a student to
+   be logged in.
+
+No `.env` change, no new configuration, no new dependency, no front-end change.
+`postbuild` copies `src/db/sql` wholesale, so nothing needed adding to the
+Dockerfile or `.dockerignore` — unlike a handbook (§4zz), a migration is already
+inside `app/`.
+
+### 21g. What was actually verified, and where
+
+On a throwaway cluster built by §6's commands (**PostgreSQL 18.4**, the dev
+machine's, not the server's 17):
+
+- The three teach migrations applied by hand with `psql -f` as `dbk_app`, all
+  three in **1.3 s** total. Nothing in `003_tonspur.sql` is version-specific.
+- `db/verify-isolation.sh`: **44 passed, 0 failed** — 41 as before plus the
+  three new `tonspur` lines. That is the part PGlite structurally cannot do:
+  it is single-user and cannot execute a `GRANT`.
+- **The grant reaches a role that predates the schema**, which is the actual
+  production situation — every student account on the server was created before
+  this migration existed. Checked directly rather than assumed: a login role
+  created *first*, then the schema dropped and rebuilt from the migration, then
+  `SELECT count(*) FROM tonspur.wiedergabe` → `77722` and
+  `UPDATE tonspur.song` → `permission denied`. `GRANT … TO PUBLIC` is not a
+  membership, so this was expected; it is cheap enough to prove that guessing
+  was not worth it. The probe role was dropped and `pg_roles` asserted empty of
+  it afterwards, per CLAUDE.md's rule.
+- `npm test`: **377 pass, 0 fail, 92 skipped**, 291 s. The skips are the six
+  live suites (that run had no cluster pointed at it).
+- The live suites separately against the cluster above: **85 pass, 0 fail,
+  0 skipped**, 35 s, under `TZ=Europe/Zurich` (§4l). They cover provisioning,
+  the runner, the catalogue, CSV import, cold storage and exercise workspaces —
+  none of which this change touches, which is the point of running them.
+- `pg_roles` afterwards holds no `u_*`, `t_*`, `vfy_*` or probe role, and
+  `datebaenkli` holds exactly `public`, `demo` and `tonspur`.
+- `npm run typecheck` clean. No TypeScript changed.
+
+**Not verified:** anything on PostgreSQL **17**, which is what the server runs,
+and anything at all on the server. Nothing here uses syntax newer than about
+PostgreSQL 9, so the risk is low rather than zero — but the deploy step that
+settles it is §21f (4), the boot log line, and it costs nothing to read.
