@@ -452,8 +452,30 @@ export function wireLogout(button) {
  * → a listener is three steps to carry an answer the handler already had, and
  * every one of them is a way for the button to do nothing at all — which is what
  * it did in a browser that never dispatched the event. Escape and the backdrop
- * have no handler to speak from, so they still come through `close`; a promise
- * cannot resolve twice, so the two paths cannot disagree.
+ * have no handler to speak from, so they still come through `close`.
+ *
+ * **The backup listener has to be taken down when the button answers, and
+ * `{ once: true }` is not enough to do it.** That sentence is the whole of
+ * HANDOFF §23 and it cost every two-step confirmation in the app.
+ * `HTMLDialogElement.close()` does not fire `close` synchronously — it *queues*
+ * a task — while the `await` in the caller resumes on a **microtask**, which
+ * runs first. So in `deleteStudent`, the second question was already open and
+ * had already registered its own listener by the time the *first* question's
+ * close event arrived; that event then answered question two, from question
+ * one's click, against a `returnValue` the second call had just cleared. It
+ * read as `false` and the delete silently did nothing.
+ *
+ * The fix is the `confirmBox.open` check in `onClose`, and the first attempt at
+ * it — removing this call's listener when a button answers — was **wrong in a
+ * way worth recording, because it looks right**: the queued event is dispatched
+ * to whatever is attached when it *fires*, so question two's brand-new listener
+ * catches question one's close regardless of what question one tidied up. What
+ * separates the two is the box, not the listener. `settle()` removes the
+ * listener as well, which stops them accumulating one per question and covers
+ * the case where the caller awaits something between two questions.
+ *
+ * A promise still cannot resolve twice — that is what made this invisible
+ * rather than what made it safe.
  */
 let confirmBox = null;
 
@@ -492,20 +514,39 @@ export function confirmDialog({ title, body = '', confirmLabel, cancelLabel, dan
   confirmBox.returnValue = '';
 
   return new Promise((resolve) => {
+    // The box outlives every question asked through it, so this call's listener
+    // must be gone before the next call registers its own. `{ once: true }`
+    // removes it when it *fires*, which is a task too late — see the header.
+    const settle = (answer) => {
+      confirmBox.removeEventListener('close', onClose);
+      resolve(answer);
+    };
+    /**
+     * `confirmBox.open` is the guard, and it has to be *this* rather than
+     * anything about the listener.
+     *
+     * Removing our own listener in `settle` is necessary and not sufficient:
+     * the queued event is dispatched to whatever is attached **when it fires**,
+     * so the next question's freshly registered listener catches the previous
+     * question's close just as happily. The only thing that tells the two apart
+     * is the box itself — a genuine close arrives with the dialog shut, and a
+     * stale one arrives after the next `showModal()` has already re-opened it.
+     */
+    const onClose = () => {
+      if (confirmBox.open) return;
+      settle(confirmBox.returnValue === 'yes');
+    };
+
     no.onclick = () => {
       confirmBox.close('no');
-      resolve(false);
+      settle(false);
     };
     yes.onclick = () => {
       confirmBox.close('yes');
-      resolve(true);
+      settle(true);
     };
-    // Escape and the backdrop only. `once` matters: the box outlives every
-    // question asked through it, so a listener left behind would answer the
-    // next one from the last one's promise.
-    confirmBox.addEventListener('close', () => resolve(confirmBox.returnValue === 'yes'), {
-      once: true,
-    });
+    // Escape and the backdrop only.
+    confirmBox.addEventListener('close', onClose);
     confirmBox.showModal();
     // The cancel button, not the dangerous one: a teacher who hits Enter out of
     // habit must not thereby drop a class's work.

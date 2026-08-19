@@ -148,6 +148,17 @@ software, too eager and a lesson dies behind an interstitial nobody can dismiss.
 `verdict()` is pure and exported for exactly that, and `test/session-guard.test.mjs`
 is the only thing that can see the difference.
 
+**`util.js`'s `confirmDialog` is the one browser API in the front end that is
+tested, and 0.13.1 is why** (`docs/HANDOFF.md` §23). It replaced
+`window.confirm` in 0.10.1 and silently broke every *two-step* confirmation in
+the app — delete a student, delete an exercise, take an exercise back — for four
+releases, because `HTMLDialogElement.close()` queues its `close` event while the
+caller's `await` resumes on a microtask, so question one's event answered
+question two. The rule the code now states and `test/dialog.test.mjs` pins:
+**a `close` event arriving while the box is open belongs to a question already
+answered.** Removing your own listener does not help — the *next* call's
+listener catches it, which is what the first attempt at the fix got wrong.
+
 It is also **the one module in the front end with a side effect**: it wraps
 `window.fetch`, installed by `util.js`, which every page already imports. That
 is deliberate and it is the argument to preserve — there are twenty-odd `fetch(`
@@ -210,6 +221,7 @@ Three layers, and the split matters:
 | `test/chalk.test.mjs` | nothing — two files on disk | that the portable and served copies of `chalk-tokens.css` have not drifted, and that the accent is declared *and* aliased. The drift is the whole point: the portable copy is the one pasted into the other Chalk apps, and it is not the one anyone edits |
 | `test/query-caps.test.mjs` | nothing — pure functions | the row cap and the byte budget. The budget case is the one to read: the old code checked it *before* adding a row, so one `repeat('x', 100000000)` came back as a 95 MB response with `rows.length === 1` — every assertion anyone had written still passed. The prefix property is the half that is easiest to break while fixing that |
 | `test/session-guard.test.mjs` | nothing — pure functions | one decision: whether this tab is still the session it rendered as. The `labelled` cases are where the browser's rule leans on the server's — a labelled request has already been checked against the cookie, which is the only reason a changed fingerprint on a 2xx may be followed |
+| `test/dialog.test.mjs` | nothing — a hand-rolled fake `<dialog>` | that a question is answered by its own click and not by the previous one's. The **only** thing the fake encodes is that `close()` *queues* its event while an `await` resumes on a microtask — the ordering that silently turned every two-step confirmation in the app into a no-op for four releases (§23). Its first draft passed against the broken code because it clicked too fast; the `drainTasks()` before the click is the test |
 | `test/markdown.test.mjs` | nothing — pure functions | the task-text renderer. The safety block comes **first** in that file on purpose: every case in it is a way the escape-first rule could be broken by a well-meaning edit, and each would render identically to correct output in a browser |
 | `test/pages.test.mjs` | nothing — the HTML on disk | that the CSV dialog's markup is byte-identical in `sql.html` and `uebungen.html`, that both carry every id `csv-import.js` reaches for, and that no page has grown an inline script, handler or `style=` — which is the only thing that keeps `script-src 'self'` worth having |
 | `test/exercise.test.mjs` | migrated PGlite + a recording provisioner | the exercise bookkeeping: which schema name gets reserved, that a *second* open does not replay the fixtures over a student's work, what a take-back decides to drop, that attempts are assigned rather than derived, and what the download says |

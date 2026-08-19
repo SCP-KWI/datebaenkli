@@ -2,8 +2,14 @@
 
 Running state document. Update it at the end of every working session.
 
-**Last updated:** 2026-08-18 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.13.0`** — §22, the schema browser folds per class. A teacher of three
+**Last updated:** 2026-08-19 · **Phases 0–10 are DEPLOYED**; the repo
+is on **`0.13.1`** — §23, and it is the one to read: **every two-step
+confirmation in the app had been a silent no-op since 0.10.1** (delete a
+student, delete an exercise, take an exercise back), because
+`HTMLDialogElement.close()` queues its event while the caller's `await` resumes
+on a microtask. Front-end only, no migration. Ship it.
+
+§22 before it, the schema browser folds per class. A teacher of three
 classes had 200-odd schemas in one flat list; they are now grouped into the
 classes they teach, one `<details>` each. **No migration**, so this deploy is
 §7's application-code-only shape.
@@ -3042,9 +3048,11 @@ deleting rows, the other pressing refresh.
 
 ### The standing numbers
 
-*(Current as of 0.13.0, 2026-08-18: **381 pass / 0 fail / 92 skipped** without a
-cluster, **85 live pass / 0 fail** with one, `verify-isolation.sh` 44/44 (§21g),
-`verify-auth.sh` 111/111 (§22e). Everything below is the older measurement and
+*(Current as of 0.13.1, 2026-08-19: **387 pass / 0 fail / 92 skipped** without a
+cluster in 263 s, **85 live pass / 0 fail** with one, `verify-isolation.sh`
+44/44 (§21g), `verify-auth.sh` 111/111 (§22e). The six new ones are
+`dialog.test.mjs` (§23c), which adds no PGlite instance and so does not move the
+peak. Everything below is the older measurement and
 is kept for its method, which is what makes the numbers comparable at all.)*
 
 **`cd app && npm test`** — **314 tests** as of 7.2, ~165 s, of which the five
@@ -6478,3 +6486,100 @@ labels the caller's own. Fixing it means the server sending titles for other
 people's workspaces, which is a bigger change than the complaint warrants, and
 grouping has already made the name legible by putting it directly under the
 student it belongs to.
+
+---
+
+## 23. Deleting a student did nothing — 0.13.1 (2026-08-19)
+
+Reported by the author: click Löschen in the class overview, confirm, and the
+student is still in the list with the count unchanged. No error, no request, an
+empty console.
+
+**It was not deleting a student. It was every two-step confirmation in the
+app** — deleting a student, deleting an exercise, and taking an exercise back
+from a class. All three are the destructive actions the second question was
+added to make safe, and all three had been no-ops since **0.10.1**.
+
+### 23a. The mechanism
+
+`confirmDialog` (0.10.1, the usability pass) replaced `window.confirm` with a
+styled `<dialog>`. Its promise is resolved by the two buttons, with a `close`
+listener as a backup for Escape and the backdrop.
+
+`HTMLDialogElement.close()` does **not** fire `close` synchronously — the spec
+says to *queue an element task*. The caller's `await` resumes on a
+**microtask**, which runs first. So:
+
+1. Question one: you click Löschen. `close('yes')` queues the event; the
+   promise resolves `true`.
+2. The microtask runs: `deleteStudent` continues to the second question, which
+   clears `returnValue`, registers **its own** close listener and calls
+   `showModal()`.
+3. *Now* question one's queued event fires — into question two's listener,
+   against the `returnValue` question two just cleared. It reads `''`, answers
+   `false`, and `if (!sure) return` bails.
+4. The second dialog is still on screen. Clicking Löschen on it resolves an
+   already-resolved promise: nothing.
+
+Which is exactly "I clicked through both dialogs and nothing happened".
+
+Single-question flows — archive, remove from class, reset — were never
+affected, which is why this survived four releases and a phase-9 acceptance run
+that did drive delete and take-back **before** 0.10.1, when they still went
+through `window.confirm`.
+
+### 23b. The fix, and the wrong fix that came first
+
+The guard is `if (confirmBox.open) return` in the close listener: a genuine
+close arrives with the box shut, a stale one arrives after the next
+`showModal()` has re-opened it. The box is the only thing that tells them
+apart.
+
+**The first attempt was to remove this call's listener when a button answers,
+and it looks right and is not.** A queued event is dispatched to whatever is
+attached *when it fires*, so question two's brand-new listener catches question
+one's close regardless of what question one tidied up. It was written, built,
+and **failed in the browser exactly as before** — which is the only reason it
+did not ship. `settle()` still removes the listener, but for hygiene: it stops
+them accumulating one per question, and covers a caller that awaits something
+between two questions.
+
+### 23c. The test, and its first draft passing against the broken code
+
+`test/dialog.test.mjs` is new and is the first test in this project to touch a
+browser API. No jsdom — a fifth dependency for one file — but a ~50-line fake
+`<dialog>` whose **only** meaningful property is that `close()` queues its
+event rather than dispatching it. That sentence is the specification's and was
+confirmed in a real browser before the file was written; if it is ever wrong the
+file proves nothing, and its header says so.
+
+**The first draft passed against the broken code.** It clicked the second
+question's button immediately after opening it, so the second question answered
+itself before the stale event could land. A reader takes a second or two over a
+dialog that says *this cannot be undone*, so in a browser the stale event always
+arrives first. The `await drainTasks()` between opening the second question and
+clicking it is the whole test; without it the file is a green tick.
+
+Verified in both directions — 6 pass against the fix, and 2 of the 6 fail
+against a reverted copy.
+
+### 23d. Verified
+
+- The three real flows driven in a browser: a student deleted (row gone, class
+  count 3 → 2, `PATCH /api/students/5/state` in the network log), an exercise
+  taken back from a class, an exercise deleted.
+- In-page, against the loaded module: Escape answers `false`, Cancel answers
+  `false`, two consecutive questions both answer `true`, and 24 questions in a
+  row leave the box closed.
+- `npm test`: **387 pass, 0 fail, 92 skipped**, 263 s. `npm run typecheck`
+  clean — no TypeScript changed, this is one file in `assets/`.
+
+### 23e. What this says about the next front-end change
+
+The front end has no DOM harness and mostly does not need one: `names.js`,
+`hints.js`, `markdown.js` and `session-guard.js` are split out precisely because
+they are pure. This bug lived in the gap that leaves — a browser API used
+correctly-looking and wrongly, in the one place where being wrong is silent.
+The bar for the next such test is the bar this one meets: **a specific documented
+browser behaviour that can be stated in one sentence, encoded in a fake, and
+shown to fail without the fix.** Not "let us test the UI".
