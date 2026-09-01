@@ -24,6 +24,7 @@
 
 import type pg from 'pg';
 import type { Db } from '../db/query.js';
+import { SHARED_SCHEMAS } from '../db/search-path.js';
 import { pgIdentity, ServiceError } from './users.js';
 
 export interface CatalogColumn {
@@ -60,6 +61,20 @@ export interface Catalog {
   /** The caller's Postgres role, which is also their schema name and username. */
   self: string;
   schemas: CatalogSchema[];
+  /**
+   * The shared schemas that resolve without a qualifier, in precedence order —
+   * the tail of the caller's `search_path` after whichever schema they are
+   * working in.
+   *
+   * Sent rather than hardcoded in the page, because two things on the client
+   * have to agree with the server about it and both are wrong *silently* when
+   * they do not: autocomplete would complete `song` in a place it does not
+   * resolve, and the hint layer would tell a student to write `tonspur.song`
+   * when bare `song` already works. The head of the path is the client's to
+   * supply — only it knows whether an exercise is open — which is why this is
+   * the tail alone and not the whole list.
+   */
+  sharedSchemas: readonly string[];
 }
 
 const KINDS: Record<string, CatalogTable['kind']> = {
@@ -221,6 +236,12 @@ export function makeCatalogReader(deps: CatalogReaderDeps): CatalogReader {
         schemas: [...schemas.values()].sort((a, b) =>
           a.own === b.own ? a.name.localeCompare(b.name) : a.own ? -1 : 1,
         ),
+        // Not filtered against what came back above. Every provisioned role can
+        // read both, so a shared schema missing from `schemas` means the
+        // migration has not run rather than that this caller cannot see it —
+        // and quietly dropping it here would turn that into an autocomplete
+        // that is merely incomplete, which is the harder of the two to notice.
+        sharedSchemas: SHARED_SCHEMAS,
       };
     },
   };

@@ -4,7 +4,7 @@
  * A student's Postgres role name, their schema name and their app login are all
  * the same string. That is deliberate:
  *
- *   - role == schema makes Postgres's default search_path ("$user", public)
+ *   - role == schema is what makes `"$user"` at the head of the search_path
  *     resolve to the student's own schema with zero per-session setup;
  *   - login == role means the name a student types to log in is the same name
  *     they will type in `SELECT * FROM u_k3a_muster_lena.kunden`, which is the

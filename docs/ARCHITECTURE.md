@@ -20,9 +20,8 @@ single most important design decision, and everything else follows from it:
 - No SQL sanitising, no statement allow-list, no parser. Students may run
   *anything* their role is permitted to run. That is exactly what we want
   pedagogically: `CREATE TABLE`, `DROP`, `GRANT`, transactions, the lot.
-- Because Postgres's default `search_path` is `"$user", public`, naming the
-  schema identically to the role means it Just Works with zero per-session
-  setup.
+- Because `"$user"` sits at the head of the `search_path`, naming the schema
+  identically to the role means it Just Works with zero per-session setup.
 
 The alternative — one shared app connection plus `SET ROLE` — is rejected: a
 student could simply type `RESET ROLE;` into the editor and escape.
@@ -472,14 +471,42 @@ where a workspace is meant.
 
 ### `search_path`, and what it deliberately excludes
 
-A query run against an exercise gets `search_path = <workspace>, public` —
-**without** `"$user"`. An unqualified `DELETE FROM kunden` typed during an
-exercise must not be able to reach the `kunden` in the student's own playground;
-that is what makes "reset this exercise only" an honest promise. Their playground
-is still theirs and still reachable, qualified.
+Three paths, one rule, and `db/search-path.ts` is the only place the list is
+written down:
 
-The exercise's own setup runs with `search_path` = the workspace alone, so an
-unqualified `CREATE TABLE` in a teacher's script lands in the exercise.
+| Where | `search_path` |
+|---|---|
+| The playground (a role default, set at provisioning) | `"$user", demo, tonspur, public` |
+| A query run against an exercise | `<workspace>, demo, tonspur, public` |
+| An exercise's own fixture setup | `<workspace>, demo, tonspur, public` |
+
+**The caller's own writable schema is first in all three.** That single position
+decides two things at once — where an unqualified `CREATE TABLE` lands, and whose
+`kantone` an unqualified `SELECT` reads. Putting a shared schema ahead of it
+would break both in one edit, and the create would fail with a permission error
+because `dbk_app` owns `demo`.
+
+**The shared datasets are on all three** (0.14). Before that they were on none,
+so `demo.kantone` and `tonspur.song` had to be qualified everywhere — including
+inside an exercise, where nothing else did. Students read that inconsistency as a
+rule they had failed to learn rather than as a schema they had failed to name.
+Both schemas are `SELECT`-only to every provisioned role, so adding them widens
+what can be *read* without a qualifier and nothing else.
+
+**`"$user"` stays off the exercise paths.** An unqualified `DELETE FROM kunden`
+typed during an exercise must not be able to reach the `kunden` in the student's
+own playground; that is what makes "reset this exercise only" an honest promise.
+Their playground is still theirs and still reachable, qualified. The same absence
+is what makes an unqualified `CREATE TABLE` in a teacher's setup script land in
+the exercise.
+
+The playground's path is a **role default** (`ALTER ROLE ... SET search_path`),
+not something the app sets per connection, and that is load-bearing rather than
+incidental: `services/query.ts` issues `RESET search_path` on every connection it
+hands back, and `RESET` restores the *role* default. A connection released after
+an exercise therefore lands back on the playground path by itself. Setting it per
+session instead would have meant either a round trip on every playground query or
+a `RESET` that silently undid it.
 
 ### Materialisation is lazy
 

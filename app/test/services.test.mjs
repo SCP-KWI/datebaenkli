@@ -523,7 +523,7 @@ test('a class code cannot be changed, because student identifiers embed it', asy
 test('a deleted identifier is never handed out again', async () => {
   // pg_role is also the schema name. If the out-of-band DROP SCHEMA has not run
   // (or failed), reusing the name would drop the next Lena Muster straight into
-  // the previous one's schema — search_path is "$user", public.
+  // the previous one's schema — "$user" is first on the search_path.
   const { db, teacher, klass } = await withClass();
   const [{ user: first }] = await users.createStudents(db, prov, teacher.id, klass.id, [
     { firstName: 'Lena', lastName: 'Muster' },

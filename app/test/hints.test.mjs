@@ -60,8 +60,23 @@ const CATALOG = {
       own: false,
       tables: [{ name: 'kantone', kind: 'view', columns: [{ name: 'kuerzel' }] }],
     },
+    // An exercise workspace they have opened but are not currently working in.
+    // Theirs, and still not on the path — which is the case that makes
+    // `own` the wrong test for "resolves unqualified".
+    {
+      name: 'x7_u_k3a_muster_lena',
+      own: false,
+      tables: [{ name: 'pokemon', kind: 'table', columns: [{ name: 'id' }, { name: 'typ' }] }],
+    },
   ],
+  // What `sql.js` computes and sends in: the schema this page is working in,
+  // then the shared datasets. Since 0.14 `demo` is on it, so a bare `kantone`
+  // resolves and is no longer a missing-qualifier mistake.
+  path: ['u_k3a_muster_lena', 'demo'],
 };
+
+/** The same student, with an exercise open — a different path over one catalog. */
+const IN_EXERCISE = { ...CATALOG, path: ['x7_u_k3a_muster_lena', 'demo'] };
 
 const found = (code, message, extra = {}) => hintFor({ code, message, ...extra }, CATALOG);
 
@@ -196,13 +211,45 @@ test('a dot the catalog cannot vouch for is part of the name, not a schema', () 
 });
 
 test('a table that exists in another schema is named with its schema', () => {
-  // `kantone` is real, but not in the student's own schema, so the fix is not a
+  // `pokemon` is real and theirs, and still does not resolve: it is in an
+  // exercise workspace they are not currently working in. The fix is not a
   // spelling correction — it is the missing qualification.
-  const out = hint('42P01', 'relation "kantone" does not exist');
-  assert.match(out, /`demo\.kantone`/);
+  const out = hint('42P01', 'relation "pokemon" does not exist');
+  assert.match(out, /`x7_u_k3a_muster_lena\.pokemon`/);
   assert.match(out, /Schema-Namen davor/);
 
-  assert.match(inEnglish('42P01', 'relation "kantone" does not exist'), /`demo\.kantone`/);
+  assert.match(
+    inEnglish('42P01', 'relation "pokemon" does not exist'),
+    /`x7_u_k3a_muster_lena\.pokemon`/,
+  );
+});
+
+test('a shared dataset is on the path, so its tables are not a qualifier problem', () => {
+  // The 0.14 regression this guards: `demo` joined the search_path, and a hint
+  // layer that still read "unqualified means my own schema" would answer a typo
+  // in `kantone` with "put `demo.` in front of it" — advice that is now wrong,
+  // and wrong in the confident register a student trusts.
+  const out = hint('42P01', 'relation "kanton" does not exist');
+  assert.match(out, /Meintest du `kantone`\?/);
+  assert.doesNotMatch(out, /`demo\.kantone`/, 'bare, because bare is what resolves');
+  assert.doesNotMatch(out, /Schema-Namen davor/);
+});
+
+test('inside an exercise the path is the workspace, not the playground', () => {
+  // Both directions, over one catalog. `own` cannot express either: the
+  // workspace is not `own`, and the playground is.
+  const inside = (message) => hintFor({ code: '42P01', message }, IN_EXERCISE);
+
+  const typo = renderHint(inside('relation "pokemo" does not exist'), german);
+  assert.match(typo, /Meintest du `pokemon`\?/, 'the workspace resolves unqualified');
+
+  const playground = renderHint(inside('relation "kunden" does not exist'), german);
+  assert.match(
+    playground,
+    /`u_k3a_muster_lena\.kunden`/,
+    'and the playground has to be named — which is what makes "reset this ' +
+      'exercise only" true',
+  );
 });
 
 test('missing FROM-clause entry is a different mistake and says so', () => {

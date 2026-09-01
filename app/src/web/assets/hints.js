@@ -152,16 +152,42 @@ const schemasOf = (catalog) => (Array.isArray(catalog?.schemas) ? catalog.schema
 
 const tablesOf = (schema) => (Array.isArray(schema?.tables) ? schema.tables : []);
 
-/** Bare names in the student's own schema — what an unqualified name resolves to. */
+/**
+ * The schemas an unqualified name resolves in, in order.
+ *
+ * `catalog.path` is set by the page, which is the only place that knows whether
+ * an exercise is open. The fallback is the caller's own schema, and it is what
+ * `csv-import.js` gets — it calls `hintFor` with no catalog at all, so there is
+ * nothing to be wrong about.
+ *
+ * Before 0.14 this was `s.own` and nothing else, which had been quietly wrong in
+ * two directions: the shared datasets were not on the path *and* an exercise
+ * workspace is not `own`, so a student inside an exercise was offered
+ * suggestions from a schema their query could not reach.
+ */
+function pathSchemas(catalog) {
+  const names = Array.isArray(catalog?.path) ? catalog.path : null;
+  const all = schemasOf(catalog);
+  if (!names) return all.filter((s) => s.own);
+  return names.map((name) => all.find((s) => s.name === name)).filter(Boolean);
+}
+
+/** Bare names on the search_path — what an unqualified name resolves to. */
 function ownTables(catalog) {
-  const own = schemasOf(catalog).filter((s) => s.own);
-  return own.flatMap((s) => tablesOf(s).map((t) => t.name));
+  // Earliest schema wins, as Postgres resolves it: a suggestion of `kantone`
+  // has to mean the one the student would actually get.
+  const seen = new Set();
+  for (const schema of pathSchemas(catalog)) {
+    for (const table of tablesOf(schema)) seen.add(table.name);
+  }
+  return [...seen];
 }
 
 /** Everything else, qualified, because that is how the student would have to write it. */
 function foreignTables(catalog) {
+  const onPath = new Set(pathSchemas(catalog).map((s) => s.name));
   return schemasOf(catalog)
-    .filter((s) => !s.own)
+    .filter((s) => !onPath.has(s.name))
     .flatMap((s) => tablesOf(s).map((t) => `${s.name}.${t.name}`));
 }
 
@@ -252,8 +278,8 @@ const HANDLERS = {
       if (nearSchema) return hint('hint.schema.unknown', { schema: plain(schema) }, nearSchema);
     }
 
-    // Unqualified — or dotted in a way the catalog would not vouch for. Their
-    // own schema is what a bare name resolves to, so a hit there is the answer;
+    // Unqualified — or dotted in a way the catalog would not vouch for. The
+    // search_path is what a bare name resolves to, so a hit there is the answer;
     // only if there is none is it worth pointing at another schema, where the
     // fix is not a spelling correction at all.
     const here = nearby(written, ownTables(catalog));
@@ -261,10 +287,12 @@ const HANDLERS = {
 
     // `suggest` refuses to return an exact match — a "did you mean `kunden`?"
     // for a name that *is* `kunden` reads as nonsense. This is the one caller
-    // for which exact is the interesting case: `SELECT * FROM kantone` when the
-    // table is `demo.kantone` is spelled perfectly and still fails, and the
-    // missing thing is the qualification. So exact is checked separately, and
-    // ahead of the near misses.
+    // for which exact is the interesting case: a name spelled perfectly that
+    // still fails, because the thing missing is the qualification. Since 0.14
+    // that no longer describes `demo`/`tonspur` — those are on the path — but it
+    // still describes another student's schema and an exercise workspace that
+    // is not the one currently open. So exact is checked separately, and ahead
+    // of the near misses.
     const foreign = foreignTables(catalog);
     const leaf = (qualified) => qualified.split('.').at(-1);
 

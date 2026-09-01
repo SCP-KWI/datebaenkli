@@ -2,12 +2,18 @@
 
 Running state document. Update it at the end of every working session.
 
-**Last updated:** 2026-08-19 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.13.1`** — §23, and it is the one to read: **every two-step
-confirmation in the app had been a silent no-op since 0.10.1** (delete a
-student, delete an exercise, take an exercise back), because
-`HTMLDialogElement.close()` queues its event while the caller's `await` resumes
-on a microtask. Front-end only, no migration. Ship it.
+**Last updated:** 2026-09-01 · **Phases 0–10 are DEPLOYED**; the repo
+is on **`0.14.0`** — §24, and it is the one to read: **students no longer type
+`demo.` or `tonspur.`** The two shared datasets are on every role's
+`search_path` now, and on the exercise paths too. **No migration**, so this is
+§7's application-code-only shape — but it is *not* a deploy-and-forget: the
+setting lands on existing accounts through the reconciler's boot pass, so the
+thing to check afterwards is the boot log, not a page. §24d is what to look for.
+
+§23 before it: **every two-step confirmation in the app had been a silent no-op
+since 0.10.1** (delete a student, delete an exercise, take an exercise back),
+because `HTMLDialogElement.close()` queues its event while the caller's `await`
+resumes on a microtask. Front-end only, no migration.
 
 §22 before it, the schema browser folds per class. A teacher of three
 classes had 200-odd schemas in one flat list; they are now grouped into the
@@ -688,9 +694,22 @@ Two consequences worth knowing before touching deployment:
   student*. A shared pool with `SET ROLE` is not a substitute — a student can
   type `RESET ROLE;` and escape it.
 - **Role name == schema name == app username.** One string. The first makes
-  `search_path` (`"$user", public`) resolve with no setup; the second means the
-  name a student types to log in is the one they type in
+  `"$user"`, at the head of the `search_path`, resolve with no setup; the second
+  means the name a student types to log in is the one they type in
   `SELECT * FROM u_k3a_muster_lena.kunden`.
+- **The caller's own writable schema is first on every `search_path`, and
+  `db/search-path.ts` is the only place the list is written** (0.14, §24). Three
+  call sites build a path and a fourth ships it to the browser. First place
+  decides two things at once — where an unqualified `CREATE TABLE` lands, and
+  whose copy of a name an unqualified `SELECT` reads — so a shared schema in
+  front of it breaks both, and the create fails with a permission error because
+  `dbk_app` owns `demo`. Do not sort that list.
+- **`"$user"` stays off the exercise paths.** It was already true in phase 9 and
+  0.14 did not soften it: an unqualified `DELETE FROM kunden` during an exercise
+  must not reach the playground `kunden`, or "reset this exercise only" stops
+  being true. What 0.14 added is `demo` and `tonspur`, which are `SELECT`-only
+  to every provisioned role and therefore cannot reach anything a reset would
+  fail to restore.
 - **The HTTP layer is closed by default.** Auth and the must-change-password
   gate are *global* hooks; a route is open only if it says
   `config: { public: true }`.
@@ -3048,12 +3067,16 @@ deleting rows, the other pressing refresh.
 
 ### The standing numbers
 
-*(Current as of 0.13.1, 2026-08-19: **387 pass / 0 fail / 92 skipped** without a
-cluster in 263 s, **85 live pass / 0 fail** with one, `verify-isolation.sh`
-44/44 (§21g), `verify-auth.sh` 111/111 (§22e). The six new ones are
-`dialog.test.mjs` (§23c), which adds no PGlite instance and so does not move the
-peak. Everything below is the older measurement and
-is kept for its method, which is what makes the numbers comparable at all.)*
+*(Current as of 0.14.0, 2026-09-01: **394 pass / 0 fail / 95 skipped** without a
+cluster in 223 s, **88 live pass / 0 fail** with one, `verify-isolation.sh`
+**50/50** (§24e), `verify-auth.sh` 111/111 (§22e). The seven new unit tests are
+`search-path.test.mjs` (five, pure) and two in `hints.test.mjs` — a third there
+is the old "another schema" case rewritten, not an addition. The three new live
+ones are two in `provision.live.test.mjs` and one in `exercise.live.test.mjs`,
+and they are why the no-cluster skip count moves 92 → 95. None adds a PGlite
+instance, so the peak does not move. Everything below is the older measurement
+and is kept for its method, which is what makes the numbers comparable at
+all.)*
 
 **`cd app && npm test`** — **314 tests** as of 7.2, ~165 s, of which the five
 live suites skip without a server. *(Phase 9 took this to 396 registered / 311
@@ -6583,3 +6606,215 @@ correctly-looking and wrongly, in the one place where being wrong is silent.
 The bar for the next such test is the bar this one meets: **a specific documented
 browser behaviour that can be stated in one sentence, encoded in a fake, and
 shown to fail without the fix.** Not "let us test the UI".
+
+---
+
+## 24. The schema qualifier — 0.14.0 (2026-09-01)
+
+Reported by the author, from a lesson: students have to write `demo.kantone`
+and `tonspur.song`, it confuses them, **and it is inconsistent with an exercise**
+where nothing needs qualifying. Two requirements, in his words: no qualifiers on
+the shared datasets, and no qualifiers inside an exercise even when the exercise
+holds a table of the same name.
+
+The second was already half true and the reason is worth stating, because it is
+what made this a small change: **exercises had never needed a qualifier.** Phase
+9 set `search_path = <workspace>, public` for a query run against an exercise.
+What neither path had was the shared schemas — so `tonspur.song` had to be
+qualified *inside* an exercise too, which is precisely the inconsistency the
+complaint was about.
+
+The gap was narrower still: **nothing ever set the playground's `search_path`.**
+It was Postgres's compiled-in default, `"$user", public`, and `demo`/`tonspur`
+are on neither.
+
+### 24a. What changed
+
+`db/search-path.ts`, new, holds the list once. Three call sites build a path
+from it and a fourth ships it to the browser; `sql.js` then uses that fourth to
+decide how to *write* a name as well as how to complete one (§24g):
+
+| Where | Now |
+|---|---|
+| `provision.ts` `roleSettings()` | `ALTER ROLE … SET search_path = "$user", demo, tonspur, public` |
+| `query.ts`, a query in an exercise | `<workspace>, demo, tonspur, public` |
+| `exercise.ts`, a fixture materialising | `<workspace>, demo, tonspur, public` |
+| `catalog.ts` → `GET /api/workspace` | `sharedSchemas: ["demo", "tonspur"]` |
+
+**The caller's own writable schema is first in all three, and that is the whole
+invariant.** First place decides two things at once — where an unqualified
+`CREATE TABLE` lands, and whose `kantone` an unqualified `SELECT` reads. A
+shared schema in front would break both in one edit, and the create would fail
+with a permission error because `dbk_app` owns `demo`. §3 now says so.
+
+`"$user"` is still off the exercise paths and 0.14 did not soften it: the
+schemas it added are `SELECT`-only to every provisioned role, so nothing an
+exercise can type reaches anything a reset would fail to restore.
+
+### 24b. A role default, not a per-session `SET` — and `RESET` is why
+
+The playground path is `ALTER ROLE … SET`, which looks like a detail and is not.
+`query.ts` issues `RESET search_path` unconditionally on every connection it
+hands back (0.11's fix for a leaked `SET`), and **`RESET` restores the *role*
+default.** So a connection released after an exercise lands back on the
+playground path by itself, and a playground query costs no extra round trip.
+
+Setting it per session instead would have meant one of two worse things: a round
+trip on every playground query, or a `RESET` that silently undid it.
+
+### 24c. `ALTER DATABASE` would have broken the migration runner
+
+The obvious one-liner — `ALTER DATABASE datebaenkli SET search_path = …` — is a
+trap, and it is worth recording because it looks strictly simpler. `dbk_app` has
+no schema of its own, so under a database-wide default its first resolvable
+schema is `demo`. `migrate.ts` creates its ledger with an **unqualified**
+`CREATE TABLE IF NOT EXISTS _migrations`, which would then land in `demo`, read
+back empty, and re-run every migration on the next boot.
+
+### 24d. The backfill was free, and it is the thing to watch on deploy
+
+`Inventory.hasSettings` and the `applyRoleSettings` seam already existed, for a
+student running `ALTER ROLE u_me RESET ALL` on themselves. Adding `search_path`
+to the drift check means **every account provisioned before 0.14 reads as drift
+and is repaired by the reconciler's startup pass.** No data migration, nothing
+run by hand.
+
+Two consequences for the deploy:
+
+- The **boot log is the confirmation**, not a page. Expect a `reconciled` line
+  naming every existing account under `settingsFixed`. A student whose browser
+  is already open keeps their old path until their pool turns over.
+- The drift check compares `pg_db_role_setting.setconfig` against
+  `PLAYGROUND_SEARCH_PATH` **byte for byte**, so the exact text Postgres stores
+  is part of the contract. It is `search_path="$user", demo, tonspur, public` —
+  a list GUC is re-serialised with `, ` between elements and quoted only where
+  needed. **Verified against a real cluster rather than assumed**, because
+  getting it wrong does not fail: it makes the reconciler repair every role on
+  every boot for ever, quietly. `test/search-path.test.mjs` pins the literal and
+  says why.
+
+The check also changed from `&&` to `@>`. Overlap asked whether *any* setting
+survived, which was right while one name stood for the whole set and is wrong
+now that `search_path` can be missing on its own — which is exactly the state
+every pre-0.14 role is in.
+
+### 24e. The live suites had never seen the shared datasets
+
+Found while writing the tests, and it had been open since the first live suite.
+`00-bootstrap.sh` creates the databases and **the app** applies the migrations,
+so a throwaway cluster stood up for the tests had a teaching database containing
+`public` and nothing else. Every suite passed anyway, because none of them
+mentioned `demo` or `tonspur` — which is precisely why "a student reads
+`demo.kantone` without qualifying it" was not a claim the live suites could make.
+
+`liveSuite()` now applies the teach migrations. It uses the app's own `migrate`,
+not `psql -f`, on §6's rule: applying them by hand does not write the ledger and
+the app then dies trying to apply them again. `migrate` takes its own advisory
+lock and keeps that ledger, so calling it from every suite costs one `SELECT`
+after the first.
+
+Two smaller things fell out of it:
+
+- `tryAsUser` returned `rows: undefined` for a multi-statement script —
+  node-postgres answers those with an *array* of results. It now takes the last
+  one. A suite that needs `set_config` still in force has to send both
+  statements on one connection, and that helper opens a fresh one per call.
+- `verify-isolation.sh` provisions with its own SQL (it mirrors ARCHITECTURE §2
+  rather than calling `provision.ts`), so it needed the `ALTER ROLE` too. It is
+  **50/50** now, up from 44. The shadowing check reads the count back rather
+  than guarding with `CASE … ELSE 1/0`: Postgres folds constant expressions at
+  plan time, so that arm raises whether or not the branch is taken.
+
+### 24f. The hint layer was the part that could have shipped wrong
+
+`hints.js` read "resolves unqualified" as "in the student's own schema"
+(`s.own`). Left alone, it would have answered a typo in `kantone` with *"put
+`demo.` in front of it"* — advice that is now wrong, in the confident register a
+student trusts, with no error anywhere.
+
+It was already wrong in the other direction and nobody had noticed: an exercise
+workspace is not `own`, so a student inside an exercise was offered suggestions
+from a schema their query could not reach. Both are fixed by the same change —
+it now reads `catalog.path`, which `sql.js` computes once from
+`sharedSchemas` plus whichever schema the page is working in, and which
+autocomplete uses too. `own` was never the right question.
+
+CodeMirror takes exactly one `defaultSchema` and there are three schemas on the
+path, so `sql.js` folds the rest into the top level of the namespace in path
+order, first writer winning — Postgres's own rule.
+
+### 24g. Clicking a table in the tree, and why it is not just "drop the schema"
+
+The schema browser's buttons wrote `SELECT * FROM demo.kantone LIMIT 50;`, and
+so did the CSV import's closing statement. Both now go through `relationRef()`
+in `sql.js`.
+
+**The rule is not "bare for anything on the path".** If Lena has her own
+`kantone` and clicks `demo.kantone` in the tree, an unqualified
+`SELECT * FROM kantone` returns **hers** — the click would show her a different
+table from the one she pointed at, and the grid would look entirely correct. So
+the test is which schema the path reaches *first* for that name: bare only when
+that is the schema clicked.
+
+Two consequences worth keeping:
+
+- **The head of the path can never be shadowed**, so a table in it is always safe
+  bare. That short-circuit is also what makes this right for the CSV import,
+  which asks about a table it created a moment ago and which `catalog` has not
+  been reloaded to know about.
+- **No catalog means qualify.** The safe direction: a needless schema name still
+  runs and still returns the right rows.
+
+`relationRef` is the one piece of this change that can be wrong invisibly and is
+*not* covered by a test — it lives in `sql.js`, which is not one of the five
+pure front-end modules. It was driven in a browser instead (§24i). If it is
+touched again, that is the moment to weigh splitting it out: it meets
+CLAUDE.md's bar on "can be wrong without anyone seeing it", and the only reason
+it did not move is that one caller reads page state.
+
+### 24h. Docs and the seeded example
+
+The student handbook taught the rule this removes (*«Der Punkt»*, §4), so its
+first example, the Tonspur paragraph and the "table does not exist" FAQ are
+rewritten. The editor's seeded document is `SELECT * FROM kantone;` — it is the
+first SQL a student ever sees and it should show the shape they are meant to
+write.
+
+**`meta/001_init.sql`'s comment still says `("$user", public)` and must stay
+that way.** `migrate.ts` hashes applied migrations and refuses to boot if one
+changes; a comment is not an exception.
+
+### 24i. Verified
+
+- **`npm test`: 394 pass, 0 fail, 95 skipped**, 223 s. `npm run typecheck` clean.
+- **Live suites: 88 pass, 0 fail** against PostgreSQL 18.4 on `/tmp/dbk`, with
+  `TZ=Europe/Zurich`.
+- **`verify-isolation.sh`: 50 passed, 0 failed**, including that Lena reads
+  `kantone` and `song` unqualified, that her own `kantone` shadows the shared
+  one, and that `demo.kantone` still answers when qualified.
+- By hand against the cluster, before any code was written, because the drift
+  check depends on it: the stored `setconfig` text, that `RESET search_path`
+  restores the role default, that a workspace shadows `demo` on the exercise
+  path, and that the playground stays unreachable unqualified from inside an
+  exercise.
+
+- **In a browser**, as a real student (`u_k3a_muster_lena`) against the dev
+  cluster, which is where §24f's risk actually lives:
+  - the editor opens on `SELECT * FROM kantone;` and it returns 26 rows;
+  - autocomplete offers bare `wiedergabe` — a `tonspur` table — after `FROM
+    wieder`;
+  - `SELECT * FROM kanton` is answered *«Meintest du `kantone`?»*, **bare**, not
+    "put `demo.` in front of it";
+  - in an exercise whose fixture creates its own `kantone`: that statement
+    returns the exercise's **2** rows, `SELECT count(*) FROM song` returns 2644
+    unqualified, and `demo.kantone` still returns 26 when qualified. This is the
+    author's second requirement, exactly as he stated it;
+  - clicking `tonspur.song` in the tree writes `SELECT * FROM song LIMIT 50;`,
+    and clicking `demo.kantone` writes it **qualified** once she has a `kantone`
+    of her own — the §24g case, which is the one that would have looked correct
+    while being wrong;
+  - and from inside that exercise, `SELECT * FROM meine_notizen` still **fails**
+    — the playground is walled off — with the hint naming
+    `u_k3a_muster_lena.meine_notizen`. That last sentence is §24f's other half
+    working: before this change the workspace was not `own`, so the suggestion
+    came from the wrong schema.

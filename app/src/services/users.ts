@@ -355,8 +355,8 @@ export async function authenticate(
  * is also their *schema* name, and deletion drops that schema out-of-band
  * (phase 2). If the drop has not run, or failed, or its archive dump errored,
  * re-issuing the name would drop the next Lena Muster straight into the
- * previous one's schema — `search_path` is `"$user", public`, so she would own
- * every table in it without doing anything. Names are free; that is not.
+ * previous one's schema — `"$user"` is first on the search_path, so she would
+ * own every table in it without doing anything. Names are free; that is not.
  */
 async function takenIdentifiers(db: Queryable): Promise<Set<string>> {
   const { rows } = await db.query<{ username: string; pg_role: string | null }>(

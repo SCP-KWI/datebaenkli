@@ -207,6 +207,57 @@ live('a table created after the grant is readable too', async () => {
   assert.equal(read.ok, true, read.error);
 });
 
+/**
+ * 0.14, and it is the pair of claims that make the search_path change safe
+ * rather than merely convenient. Both are invisible in a browser: too much on
+ * the path and an exercise reaches the playground, too little and the student
+ * is back to typing `tonspur.`
+ *
+ * `set_config` here rather than driving the runner, because the runner is what
+ * `query.live.test.mjs` covers and this is about what the *path* resolves to.
+ * The string is built the same way `services/query.ts` builds it.
+ */
+live('inside a workspace the shared datasets are bare and the workspace still wins', async () => {
+  const ws = wsOf(LENA, EX_A);
+  const path = `${ws}, demo, tonspur, public`;
+
+  // A table whose name a shared dataset also uses. The workspace is ahead of
+  // both on the path, so this is the one an unqualified name has to find.
+  await seed(LENA, ws, 'kantone', 3);
+
+  const shadowed = await asUser(
+    LENA,
+    `SELECT set_config('search_path', '${path}', false);
+     SELECT count(*)::int AS n FROM kantone`,
+  );
+  assert.equal(
+    shadowed.rows[0].n,
+    3,
+    'the workspace copy, not demo.kantone — an exercise owns its own names',
+  );
+
+  const bare = await asUser(
+    LENA,
+    `SELECT set_config('search_path', '${path}', false);
+     SELECT count(*)::int AS n FROM song`,
+  );
+  assert.ok(bare.rows[0].n > 0, 'and tonspur is reachable without a qualifier');
+
+  // The half that must NOT change: `"$user"` is still off this path, so an
+  // unqualified name cannot reach the playground. Without this, "reset this
+  // exercise only" stops being an honest promise.
+  const reach = await tryAsUser(
+    LENA,
+    PW[LENA],
+    `SELECT set_config('search_path', '${path}', false);
+     SELECT count(*) FROM meine_notizen`,
+  );
+  assert.equal(reach.ok, false, 'the playground must stay unreachable unqualified');
+  assert.match(reach.error, /meine_notizen/);
+
+  await asUser(LENA, `DROP TABLE ${ws}.kantone`);
+});
+
 live('dropping one workspace leaves the playground and the other exercises alone', async () => {
   // The claim the whole "a workspace is its own schema" design exists to make.
   await prov.createWorkspace(LENA, wsOf(LENA, EX_B), [TEACHER]);

@@ -107,8 +107,8 @@ live('provisioning creates the role, the schema it owns, and the session rails',
     assert.equal(row.schema_owner, row.rolname, 'role name == schema name == owner');
   }
 
-  // search_path is "$user", public, so an unqualified CREATE TABLE has to land
-  // in their own schema with no per-session setup. That equality is the whole
+  // Their own schema is first on the search_path, so an unqualified CREATE TABLE
+  // has to land in it with no per-session setup. That equality is the whole
   // reason the three names are one string.
   assert.ok((await asUser(LENA, `CREATE TABLE kunden(id int primary key, name text)`)).ok);
   // Deliberately unqualified — the claim is that an unqualified CREATE landed
@@ -125,6 +125,74 @@ live('provisioning creates the role, the schema it owns, and the session rails',
 
   const timeout = await asUser(LENA, `SHOW statement_timeout`);
   assert.equal(timeout.rows[0].statement_timeout, '15s');
+});
+
+/**
+ * 0.14. Asserted against a real server because nothing else can see it: PGlite
+ * has no `ALTER ROLE ... SET`, and the failure this guards against is not an
+ * error but a query that runs and reads the wrong table.
+ *
+ * The `SHOW` is the load-bearing one. `provision.ts` diffs
+ * `pg_db_role_setting.setconfig` against `PLAYGROUND_SEARCH_PATH` byte for byte
+ * to decide whether a role has drifted, so the exact text Postgres stores is
+ * part of the contract — and getting it wrong does not fail, it makes the
+ * reconciler repair every role on every boot for ever.
+ */
+live('a student gets demo and tonspur on their path, behind their own schema', async () => {
+  const path = await asUser(LENA, `SHOW search_path`);
+  assert.equal(path.rows[0].search_path, '"$user", demo, tonspur, public');
+
+  const stored = await teach.query(
+    `SELECT unnest(s.setconfig) AS entry
+       FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
+      WHERE r.rolname = $1 AND s.setdatabase = 0`,
+    [LENA],
+  );
+  assert.ok(
+    stored.rows.some((r) => r.entry === 'search_path="$user", demo, tonspur, public'),
+    'the stored form must match what inventory() compares against, or the drift ' +
+      'check never agrees and the reconciler repairs this role on every pass',
+  );
+
+  // The point of the whole change: both shared datasets, no qualifier.
+  const bare = await asUser(LENA, `SELECT count(*)::int AS n FROM kantone`);
+  assert.equal(bare.rows[0].n, 26);
+  assert.ok((await asUser(LENA, `SELECT id FROM song LIMIT 1`)).rows.length === 1);
+
+  // And the student's own copy wins, which is what keeps `CREATE TABLE kantone`
+  // from being a trap. `demo.kantone` has 26 rows; this one has two.
+  assert.ok(
+    (
+      await asUser(
+        LENA,
+        `CREATE TABLE kantone(id int, name text);
+         INSERT INTO kantone VALUES (1, 'meins'), (2, 'auch meins')`,
+      )
+    ).ok,
+  );
+  const shadowed = await asUser(LENA, `SELECT count(*)::int AS n FROM kantone`);
+  assert.equal(shadowed.rows[0].n, 2, 'the student\'s own table shadows the shared one');
+  const shared = await asUser(LENA, `SELECT count(*)::int AS n FROM demo.kantone`);
+  assert.equal(shared.rows[0].n, 26, 'and the shared one is still there, qualified');
+
+  // Left behind it would answer for the unqualified `kunden` assertions above
+  // on a re-run against the same cluster.
+  assert.ok((await asUser(LENA, `DROP TABLE kantone`)).ok);
+});
+
+live('a role that has lost its settings reads as drift and is repaired', async () => {
+  // Exactly what a student can do to themselves: every one of these is USERSET.
+  await teach.query(`ALTER ROLE "${LENA}" RESET ALL`);
+
+  const before = await prov.inventory([LENA]);
+  assert.equal(before.roles.get(LENA).hasSettings, false, 'RESET ALL must read as drift');
+
+  await prov.applyRoleSettings(LENA);
+
+  const after = await prov.inventory([LENA]);
+  assert.equal(after.roles.get(LENA).hasSettings, true, 'and the narrow repair must fix it');
+  const path = await asUser(LENA, `SHOW search_path`);
+  assert.equal(path.rows[0].search_path, '"$user", demo, tonspur, public');
 });
 
 live('a student cannot touch another student', async () => {

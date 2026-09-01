@@ -147,8 +147,14 @@ export function createEditor({ parent, doc = '', onRun }) {
      * Re-point autocomplete at the caller's catalog.
      *
      * `defaultSchema` is what makes `SELECT * FROM kunden` complete without the
-     * `u_k3a_muster_lena.` prefix — Postgres resolves it through `search_path`
-     * ("$user", public), so the editor should too.
+     * `u_k3a_muster_lena.` prefix — Postgres resolves it through `search_path`,
+     * so the editor should too.
+     *
+     * CodeMirror takes exactly one of them and the path has three schemas on it
+     * since 0.14, so `sql.js` folds the rest into the top level of `schema`
+     * before calling this. That split is deliberate: which schemas are on the
+     * path is a question about the *session*, and this file knows nothing about
+     * sessions.
      */
     setCatalog(schema, defaultSchema) {
       view.dispatch({

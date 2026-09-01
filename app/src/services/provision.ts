@@ -44,6 +44,7 @@ import {
 } from '../db/ident.js';
 import { dropUserPool, getUserPool } from '../db/pools.js';
 import type { Db, Queryable } from '../db/query.js';
+import { PLAYGROUND_SEARCH_PATH } from '../db/search-path.js';
 import { audit } from './audit.js';
 
 const execFileAsync = promisify(execFile);
@@ -98,11 +99,16 @@ export interface Inventory {
   /**
    * `hasSettings` is whether the role still carries the `roleSettings` GUCs.
    *
-   * A student may run `ALTER ROLE u_me RESET ALL` on their own role — all three
-   * settings are USERSET, so Postgres permits it — and nothing ever put them
+   * A student may run `ALTER ROLE u_me RESET ALL` on their own role — every one
+   * of them is USERSET, so Postgres permits it — and nothing ever put them
    * back: `roleSettings` is only issued from `ensureRole`, which the reconciler
    * reached only when the role or schema was *missing*. The rails silently
    * ceased to exist and no report said so.
+   *
+   * Since 0.14 it also covers `search_path`, which makes it the migration path
+   * for that setting as well as the repair for it: a role provisioned earlier
+   * has no `search_path` entry, so it reads as drift and is fixed on the next
+   * pass. That is why adding the setting needed no data migration.
    */
   roles: Map<string, { canLogin: boolean; canConnect: boolean; hasSettings: boolean }>;
   schemas: Set<string>;
@@ -281,6 +287,21 @@ const APP_USER = quoteIdent(assertPlainIdent(config.pg.user));
  * set it per role at all. It is set cluster-wide in docker-compose.yml, where
  * a student cannot reach it. Note it caps spill to disk only — it is not a
  * second line of defence for the above.
+ *
+ * **`search_path` is the odd one out and does not belong to that argument at
+ * all.** The other three are rails a student can step over and the comment
+ * above is about how little they are worth; this one is not a limit in any
+ * sense, it is the reason `SELECT * FROM kantone` works without a schema name.
+ * A student overriding it hurts nobody, including themselves — `RESET ALL`
+ * puts them back on `"$user", public`, which is where everyone was before 0.14,
+ * and the reconciler restores it on the next pass either way.
+ *
+ * Set here as a role default rather than per connection, and that is what makes
+ * `query.ts`'s unconditional `RESET search_path` keep working: `RESET` restores
+ * the *role* default, so a connection handed back after an exercise lands on
+ * the playground path rather than on Postgres's compiled-in one. Setting it per
+ * session instead would have meant either a round trip on every playground
+ * query or a `RESET` that silently undid it.
  */
 function roleSettings(role: string): string[] {
   const r = quoteIdent(role);
@@ -290,6 +311,12 @@ function roleSettings(role: string): string[] {
       config.limits.idleInTransactionTimeout,
     )}`,
     `ALTER ROLE ${r} SET work_mem = ${quoteLiteral(config.limits.workMem)}`,
+    // Not `quoteLiteral`: `search_path` is a list GUC, and a single-quoted
+    // string would be stored as one schema *named* `"$user", demo, …`. The
+    // elements are compile-time constants that `db/search-path.ts` has already
+    // put through `assertPlainIdent`, so there is no caller string here to
+    // quote — which is the only reason this line is allowed to look like this.
+    `ALTER ROLE ${r} SET search_path = ${PLAYGROUND_SEARCH_PATH}`,
   ];
 }
 
@@ -1137,20 +1164,33 @@ export function makeProvisioner(teachDb: Db): Provisioner {
       }>(
         // `pg_db_role_setting` is where `ALTER ROLE ... SET` lands. `setdatabase
         // = 0` is the cluster-wide form, which is the one `roleSettings` uses.
-        // Checked for the presence of `statement_timeout` specifically rather
-        // than for a non-empty array: `RESET ALL` deletes the row entirely, but
-        // resetting one setting leaves the others behind, and the partial case
-        // should repair too.
+        // Checked for the presence of named settings rather than for a non-empty
+        // array: `RESET ALL` deletes the row entirely, but resetting one setting
+        // leaves the others behind, and the partial case should repair too.
+        //
+        // `@>` and not `&&` (0.14): overlap asks whether *any* of them survived,
+        // which was right while one name stood for the whole set and is wrong
+        // now that `search_path` can be missing on its own. Containment is also
+        // what makes this the backfill — every role provisioned before 0.14 has
+        // the timeout and no `search_path`, reports `hasSettings: false`, and is
+        // repaired by the reconciler's next pass with nothing run by hand.
+        //
+        // The `search_path` element has to match byte for byte what Postgres
+        // stores, which is `PLAYGROUND_SEARCH_PATH` verbatim — a list GUC is
+        // re-serialised with `, ` between elements and quotes only where needed.
+        // Checked against a real cluster: a mismatch here does not fail, it
+        // repairs every role on every boot forever.
         `SELECT r.rolname, r.rolcanlogin,
                 has_database_privilege(r.rolname, $2, 'CONNECT') AS canconnect,
-                coalesce(s.setconfig::text[] && ARRAY(
-                  SELECT 'statement_timeout=' || $3::text
-                ), false) AS hassettings
+                coalesce(s.setconfig::text[] @> ARRAY[
+                  'statement_timeout=' || $3::text,
+                  'search_path=' || $4::text
+                ], false) AS hassettings
            FROM pg_roles r
            LEFT JOIN pg_db_role_setting s
              ON s.setrole = r.oid AND s.setdatabase = 0
           WHERE r.rolname = ANY($1::text[])`,
-        [wanted, config.pg.teachDb, config.limits.statementTimeout],
+        [wanted, config.pg.teachDb, config.limits.statementTimeout, PLAYGROUND_SEARCH_PATH],
       );
       for (const r of roleRows) {
         roles.set(r.rolname, {

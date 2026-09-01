@@ -172,6 +172,10 @@ BEGIN
     EXECUTE format('ALTER ROLE %I SET statement_timeout = %L', r, '15s');
     EXECUTE format('ALTER ROLE %I SET idle_in_transaction_session_timeout = %L', r, '60s');
     EXECUTE format('ALTER ROLE %I SET work_mem = %L', r, '8MB');
+    -- 0.14. `%L` would make this one quoted string, i.e. a single schema whose
+    -- *name* is `"$user", demo, …`; search_path is a list, so the value goes in
+    -- verbatim. It is a literal here, not a name this script was handed.
+    EXECUTE format('ALTER ROLE %I SET search_path = "$user", demo, tonspur, public', r);
   END LOOP;
   FOREACH r IN ARRAY ARRAY['vfy_lena','vfy_tim'] LOOP
     EXECUTE format('SET ROLE %I', r);
@@ -206,6 +210,33 @@ denied "Tim CANNOT write into Lena's schema" vfy_tim "$TIM" datebaenkli \
    "CREATE TABLE vfy_lena.evil(x int)"
 denied "Tim CANNOT drop Lena's table" vfy_tim "$TIM" datebaenkli \
    "DROP TABLE vfy_lena.kunden"
+
+echo
+echo "=== shared data resolves without a qualifier (0.14) ==="
+# The search_path is what makes this true, and it is set per role by
+# provision.ts. A student who has to write `demo.` is the bug this checks for.
+ok "Lena reads kantone unqualified" vfy_lena "$LENA" datebaenkli \
+   "SELECT count(*) FROM kantone"
+ok "Lena reads song unqualified (tonspur)" vfy_lena "$LENA" datebaenkli \
+   "SELECT count(*) FROM song LIMIT 1"
+# The other half, and the one that makes the first safe: her own table wins.
+# Without it, `CREATE TABLE kantone` would be a trap rather than a lesson.
+# Asserted by reading the count back rather than with a CASE guard: Postgres
+# folds constant expressions at plan time, so an `ELSE 1/0` arm raises whether
+# or not the branch is taken.
+ok "Lena: CREATE TABLE kantone lands in her own schema" vfy_lena "$LENA" datebaenkli \
+   "CREATE TABLE kantone(id int); INSERT INTO kantone VALUES (1);"
+shadowed="$(run vfy_lena "$LENA" datebaenkli 'SELECT count(*) FROM kantone')"
+if [ "$shadowed" = "1" ]; then
+  echo "  PASS  Lena: her own kantone shadows the shared one"
+  PASS=$((PASS+1))
+else
+  echo "  FAIL  Lena: unqualified kantone gave $shadowed rows, expected her own 1"
+  FAIL=$((FAIL+1))
+fi
+ok "Lena: demo.kantone is still there, qualified" vfy_lena "$LENA" datebaenkli \
+   "SELECT count(*) FROM demo.kantone"
+ok "Lena: cleanup" vfy_lena "$LENA" datebaenkli "DROP TABLE kantone"
 
 echo
 echo "=== shared demo data ==="

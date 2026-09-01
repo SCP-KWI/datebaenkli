@@ -462,13 +462,13 @@ footer {
 <p>Danach schreib selbst etwas:</p>
 
 <div class="quote">SELECT name, einwohner
-FROM demo.kantone
+FROM kantone
 ORDER BY einwohner DESC
 LIMIT 5;</div>
 
 <p>Zwei Dinge, die dir hier begegnen und später ständig vorkommen:</p>
 <ul>
-  <li><strong>Der Punkt.</strong> <code>demo.kantone</code> heisst «die Tabelle <code>kantone</code> im Bereich <code>demo</code>». Bei deinen eigenen Tabellen kannst du den Teil vor dem Punkt weglassen — <code>SELECT * FROM meine_tabelle;</code> genügt, weil dein eigener Bereich zuerst durchsucht wird.</li>
+  <li><strong>Der Bereich ist meistens klar.</strong> <code>kantone</code> genügt: gesucht wird zuerst in deinem eigenen Bereich, dann in <code>demo</code> und <code>tonspur</code>. Du darfst den Bereich trotzdem hinschreiben — <code>demo.kantone</code> heisst «die Tabelle <code>kantone</code> im Bereich <code>demo</code>» — und musst es dann, wenn zwei Bereiche denselben Tabellennamen haben und du den hinteren meinst. Heisst deine eigene Tabelle auch <code>kantone</code>, bekommst du deine.</li>
   <li><strong>Das Semikolon.</strong> Es beendet eine Anweisung. Du darfst mehrere hintereinander schreiben und alle auf einmal ausführen; dann bekommst du auch mehrere Ergebnisse untereinander.</li>
 </ul>
 
@@ -477,7 +477,7 @@ LIMIT 5;</div>
   <p>Führst du fünf Anweisungen zusammen aus und die vierte schlägt fehl, werden auch die drei davor wieder rückgängig gemacht. Entweder alle oder keine. Das ist kein Ärgernis, sondern der Grund, weshalb es Transaktionen gibt — und du siehst es hier zum ersten Mal von selbst.</p>
 </div>
 
-<p>Neben <code>demo</code> findest du im Baum einen zweiten mitgelieferten Bereich: <code>tonspur</code>, mit Songs, Alben, Playlists und über 77 000 abgespielten Titeln. Er funktioniert genau gleich — <code>SELECT * FROM tonspur.song;</code> — ist aber gross genug, dass sich damit richtig rechnen lässt. Lesen darfst du beide, ändern keinen von beiden.</p>
+<p>Neben <code>demo</code> findest du im Baum einen zweiten mitgelieferten Bereich: <code>tonspur</code>, mit Songs, Alben, Playlists und über 77 000 abgespielten Titeln. Er funktioniert genau gleich — <code>SELECT * FROM song;</code> — ist aber gross genug, dass sich damit richtig rechnen lässt. Lesen darfst du beide, ändern keinen von beiden.</p>
 
 <p>Angezeigt werden höchstens 1000 Zeilen. Sind es mehr, steht es über der Tabelle; gelaufen ist die Abfrage trotzdem vollständig.</p>
 </section>
@@ -654,7 +654,7 @@ INSERT INTO lieblingsfilme VALUES ('Arrival', 2016, 5.5);</div>
 
 <details class="faq">
   <summary>Die Tabelle gibt es angeblich nicht, ich sehe sie aber links.</summary>
-  <p>Dann steht sie in einem anderen Bereich als dem, in dem du gerade suchst. Schreib den Namen mit Punkt davor: <code>demo.kantone</code> statt <code>kantone</code>. Und achte darauf, ob du gerade in einer Übung bist — dort meinen Namen ohne Punkt die Tabellen der Übung.</p>
+  <p>Deine eigenen Tabellen, <code>demo</code> und <code>tonspur</code> findet die Datenbank ohne Punkt. Alles andere nicht: die Tabelle einer Übung, die gerade nicht offen ist, zum Beispiel. Dann schreib den Bereich mit Punkt davor — der Name steht links im Baum über der Tabelle. Und achte darauf, ob du gerade in einer Übung bist: dort meinen Namen ohne Punkt zuerst die Tabellen der Übung.</p>
 </details>
 
 <details class="faq">

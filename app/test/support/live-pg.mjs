@@ -66,6 +66,41 @@ async function serverIsUp() {
 }
 
 /**
+ * Apply the teach migrations, so the throwaway cluster has what the deployed one
+ * has: the `demo` and `tonspur` schemas.
+ *
+ * Added in 0.14, and the gap it closes had been open since the first live suite.
+ * `00-bootstrap.sh` creates the databases and the app applies the migrations, so
+ * a cluster stood up for the tests and never booted the app had a teaching
+ * database containing `public` and nothing else. Every suite passed anyway,
+ * because none of them mentioned the shared datasets — which is precisely why
+ * "a student reads `demo.kantone` without qualifying it" was not a claim the
+ * live suites could make.
+ *
+ * `migrate` takes its own advisory lock and keeps a `_migrations` ledger, so
+ * calling this from every suite costs one `SELECT` after the first one wins the
+ * race. It is the app's own migration runner rather than a `psql -f`, on the
+ * §6 rule: applying them by hand does not write the ledger, and the app then
+ * dies trying to apply them again.
+ */
+async function migrateTeach() {
+  const { migrate, sqlDir } = await import('../../dist/db/migrate.js');
+  const pool = new pg.Pool({
+    host: PGHOST,
+    port: PGPORT,
+    database: TEACH_DB,
+    user: 'dbk_app',
+    password: appPassword(),
+    max: 1,
+  });
+  try {
+    await migrate(pool, sqlDir('teach'), { info: () => {}, warn: () => {} });
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
+/**
  * The whole preamble, in the one order that works: probe, register the skip,
  * then take the lock — never the lock first, which would block forever waiting
  * for a server that is not there.
@@ -88,6 +123,10 @@ export async function liveSuite(name) {
     database: TEACH_DB,
     password: appPassword(),
   });
+  // Inside the lock: two suites migrating at once would serialise on `migrate`'s
+  // own lock anyway, but taking ours first keeps the ordering one thing to
+  // reason about rather than two.
+  await migrateTeach();
   return { LIVE, live: test, releaseLock: release };
 }
 
@@ -98,6 +137,13 @@ export async function liveSuite(name) {
  * This is the only thing that proves a claim about privileges. Asking `dbk_app`
  * what a student can see answers a different question, because it holds student
  * roles NOINHERIT (HANDOFF §4a).
+ *
+ * `sql` may be a script. node-postgres answers a multi-statement simple query
+ * with an *array* of results, so the rows are taken from the last one — a suite
+ * that needs `set_config` to still be in force has to send both statements on
+ * one connection, and this function opens a fresh one per call. Before 0.14
+ * such a script came back as `rows: undefined` and the assertion failed on a
+ * TypeError several lines away from the cause.
  */
 export async function tryAsUser(role, password, sql) {
   const client = new pg.Client({
@@ -111,7 +157,8 @@ export async function tryAsUser(role, password, sql) {
   try {
     await client.connect();
     const result = await client.query(sql);
-    return { ok: true, rows: result.rows, rowCount: result.rowCount };
+    const last = Array.isArray(result) ? result[result.length - 1] : result;
+    return { ok: true, rows: last.rows, rowCount: last.rowCount };
   } catch (err) {
     return { ok: false, error: err.message, rows: [] };
   } finally {

@@ -17,8 +17,21 @@ A shared pool with `SET ROLE` is not a substitute — a student can type
 `RESET ROLE;` into the editor and escape it.
 
 `role name == schema name == app username`, one string, deliberately. It makes
-`search_path` (`"$user", public`) resolve with no setup, and means the name a
-student types to log in is the one they type in `SELECT * FROM u_k3a_muster_lena.kunden`.
+`"$user"`, at the head of the `search_path`, resolve with no setup, and means the
+name a student types to log in is the one they type in
+`SELECT * FROM u_k3a_muster_lena.kunden`.
+
+**`db/search-path.ts` owns the rest of that path, and it is one file for a
+reason** (0.14). Three places set a `search_path` — the role default in
+`provision.ts`, the exercise path in `query.ts`, the fixture path in
+`exercise.ts` — and a fourth, `catalog.ts`, tells the browser what it is so
+autocomplete and the hint layer agree. Four copies of a list whose *order*
+decides which table `SELECT * FROM kantone` reads is four chances to disagree,
+and they disagree silently: the query still runs, against the wrong table. The
+invariant is that **the caller's own writable schema is first**, which is what
+makes an unqualified `CREATE TABLE` land somewhere they may write and their own
+copy of a name win. `"$user"` stays off the exercise paths — see
+`docs/HANDOFF.md` §3.
 
 `docs/HANDOFF.md` §3 lists the other decisions not to silently reverse. Check it
 before changing anything about auth, grants, identifiers or cookies.
@@ -220,6 +233,7 @@ Three layers, and the split matters:
 | `test/hints.test.mjs` | nothing — pure functions | the German SQLSTATE explanations and the did-you-mean. Every `message` in it was copied off a real server — **get a new one the same way**, because four of the shapes are not what they look like. The `2BP01` block is the one exception and says so at the site: PGlite 18.3, because no cluster existed that day |
 | `test/chalk.test.mjs` | nothing — two files on disk | that the portable and served copies of `chalk-tokens.css` have not drifted, and that the accent is declared *and* aliased. The drift is the whole point: the portable copy is the one pasted into the other Chalk apps, and it is not the one anyone edits |
 | `test/query-caps.test.mjs` | nothing — pure functions | the row cap and the byte budget. The budget case is the one to read: the old code checked it *before* adding a row, so one `repeat('x', 100000000)` came back as a 95 MB response with `rows.length === 1` — every assertion anyone had written still passed. The prefix property is the half that is easiest to break while fixing that |
+| `test/search-path.test.mjs` | nothing — pure functions | the one list whose order decides which table an unqualified name reads. Three call sites build a path from it and a fourth ships it to the browser; the assertion that matters is that the caller's own schema is first in every one of them, because that is what a well-meaning "sort the shared schemas alphabetically" would quietly break |
 | `test/session-guard.test.mjs` | nothing — pure functions | one decision: whether this tab is still the session it rendered as. The `labelled` cases are where the browser's rule leans on the server's — a labelled request has already been checked against the cookie, which is the only reason a changed fingerprint on a 2xx may be followed |
 | `test/dialog.test.mjs` | nothing — a hand-rolled fake `<dialog>` | that a question is answered by its own click and not by the previous one's. The **only** thing the fake encodes is that `close()` *queues* its event while an `await` resumes on a microtask — the ordering that silently turned every two-step confirmation in the app into a no-op for four releases (§23). Its first draft passed against the broken code because it clicked too fast; the `drainTasks()` before the click is the test |
 | `test/markdown.test.mjs` | nothing — pure functions | the task-text renderer. The safety block comes **first** in that file on purpose: every case in it is a way the escape-first rule could be broken by a well-meaning edit, and each would render identically to correct output in a browser |

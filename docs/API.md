@@ -175,8 +175,9 @@ preserves work.
 | `POST` | `/api/query/cancel` | Stops whatever the caller is running. `{cancelled: n}`. |
 
 `exerciseId` (phase 9) says the script belongs to an exercise rather than to the
-caller's playground, and the runner sets `search_path` to that workspace for the
-duration. It is an **id, not a schema name**: the server maps it, so which schema
+caller's playground, and the runner sets `search_path` to
+`<workspace>, demo, tonspur, public` for the duration — the workspace first, and
+no `"$user"`. It is an **id, not a schema name**: the server maps it, so which schema
 this caller means is never something the browser gets to assert. `409
 exercise_not_open` if they have not opened it yet; `404 exercise_not_found` if it
 is not theirs to open.
@@ -274,6 +275,7 @@ the tree would hand every student a list of every other student's tables:
 
 ```json
 { "self": "u_k3a_muster_lena",
+  "sharedSchemas": ["demo", "tonspur"],
   "schemas": [
     { "name": "u_k3a_muster_lena", "own": true, "tables": [
       { "name": "kunden", "kind": "table", "estimatedRows": null,
@@ -282,6 +284,15 @@ the tree would hand every student a list of every other student's tables:
     { "name": "demo", "own": false, "tables": [ … ] }
   ]}
 ```
+
+**`sharedSchemas` (0.14) is the tail of the caller's `search_path`**, in
+precedence order — the schemas whose tables resolve with no qualifier wherever
+the caller happens to be working. The *head* is the client's to supply, because
+only it knows whether an exercise is open; the page prepends the workspace (or
+`self`) and uses the result for two things that are silently wrong when they
+disagree with the server. Autocomplete would offer a bare name that does not
+resolve, and the hint layer would tell a student to write `tonspur.song` when
+`song` already works.
 
 A student sees their own schema, `demo`, `tonspur` and `public`; a teacher
 additionally sees the schema of every student they teach. **A schema with
@@ -468,9 +479,9 @@ Lowercased, umlauts transliterated German-style (`ä→ae`, `ß→ss`), other ac
 stripped, everything outside `[a-z0-9]` removed, clamped to 63 bytes, numeric
 suffix on collision (`t_schaffner2`).
 
-Role == schema makes Postgres's default `search_path` (`"$user", public`) resolve
-with no per-session setup. Login == role means the name a student types to log in
-is the same one they type in `SELECT * FROM u_k3a_muster_lena.kunden`.
+Role == schema is what makes `"$user"`, at the head of the `search_path`,
+resolve with no per-session setup. Login == role means the name a student types
+to log in is the same one they type in `SELECT * FROM u_k3a_muster_lena.kunden`.
 
 ## Exercises — phase 9
 

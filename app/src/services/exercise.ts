@@ -64,6 +64,7 @@
 import type pg from 'pg';
 import { allocateIdentifier, workspaceSchemaBase } from '../auth/identifiers.js';
 import type { Db, Queryable } from '../db/query.js';
+import { workspaceSearchPath } from '../db/search-path.js';
 import { audit } from './audit.js';
 import { type ColumnType, coerce, parseCsv, usesDecimalComma } from './csv.js';
 import { createAndFill, foldRelationName, MAX_IMPORT_COLUMNS } from './import.js';
@@ -846,11 +847,18 @@ export function makeExerciseService(deps: ExerciseServiceDeps) {
    * "reset" and "open" both look like they might help and neither is obviously
    * right, whereas an empty workspace has exactly one next step.
    *
-   * `search_path` is the workspace alone — **not** `"$user"` — so an unqualified
-   * `CREATE TABLE` in a teacher's script lands in the exercise rather than in the
-   * student's own playground. It is reset in the `finally` for the reason
-   * `provision.ts`'s `asRole` gives: node-postgres does not `DISCARD ALL` on
-   * release, so a leaked `SET` is handed to whatever uses this connection next.
+   * `search_path` is the workspace first and **not** `"$user"`, so an
+   * unqualified `CREATE TABLE` in a teacher's script lands in the exercise
+   * rather than in the student's own playground. The shared datasets follow it
+   * (0.14), which is what lets a fixture be written as
+   * `CREATE TABLE top_songs AS SELECT … FROM song` — the same names the student
+   * will then use unqualified in the same workspace. Order matters and the
+   * workspace winning is the point: a script that creates its own `song` and
+   * then inserts into it reaches its own, not `tonspur`'s.
+   *
+   * It is reset in the `finally` for the reason `provision.ts`'s `asRole` gives:
+   * node-postgres does not `DISCARD ALL` on release, so a leaked `SET` is handed
+   * to whatever uses this connection next.
    */
   async function materialise(
     client: pg.PoolClient,
@@ -862,7 +870,9 @@ export function makeExerciseService(deps: ExerciseServiceDeps) {
       await client.query('BEGIN');
       // A bind parameter cannot be a `SET` target, but `set_config` takes one —
       // which is how this file keeps its promise to build no SQL by string.
-      await client.query(`SELECT set_config('search_path', $1, false)`, [schema]);
+      await client.query(`SELECT set_config('search_path', $1, false)`, [
+        workspaceSearchPath(schema),
+      ]);
 
       for (const source of sources) {
         current = source;

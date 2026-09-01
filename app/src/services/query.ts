@@ -37,6 +37,7 @@
 import pg from 'pg';
 import { config } from '../config.js';
 import type { Db } from '../db/query.js';
+import { workspaceSearchPath } from '../db/search-path.js';
 import { mayGrow, type QuotaGuard } from './quota.js';
 import { pgIdentity, ServiceError } from './users.js';
 import type { CancelReason, Watchdog } from './watchdog.js';
@@ -85,9 +86,10 @@ export interface QueryOutcome {
 /**
  * Which of the caller's schemas this script is being run against — phase 9.
  *
- * Absent means their playground, which is what `search_path`'s `"$user"` already
- * resolves to and therefore needs no statement at all. Present means one of
- * their exercise workspaces, and the runner sets `search_path` for the duration.
+ * Absent means their playground, which the role's own `search_path` default
+ * already resolves to and which therefore needs no statement at all. Present
+ * means one of their exercise workspaces, and the runner sets `search_path` for
+ * the duration.
  */
 export interface QueryContext {
   exerciseId: number;
@@ -518,7 +520,8 @@ export function makeQueryRunner(deps: QueryRunnerDeps): QueryRunner {
         if (pid === undefined) throw new Error('Postgres did not report a backend pid.');
 
         if (context) {
-          // `<workspace>, public` — and deliberately **without** `"$user"`.
+          // `<workspace>, demo, tonspur, public` — and deliberately **without**
+          // `"$user"`.
           //
           // An unqualified `DELETE FROM kunden` typed while working on an
           // exercise must not be able to reach the `kunden` in the student's own
@@ -526,12 +529,18 @@ export function makeQueryRunner(deps: QueryRunnerDeps): QueryRunner {
           // promise rather than a hopeful one. Their playground is still there
           // and still theirs — it just has to be named.
           //
+          // The shared datasets joined that path in 0.14 and do not weaken it:
+          // they are `SELECT`-only to every provisioned role, so nothing typed
+          // here can reach anything a reset would fail to restore. The workspace
+          // stays first, so an exercise table named `kantone` still shadows
+          // `demo.kantone` rather than the other way round.
+          //
           // `set_config` rather than `SET`, because `SET` takes no bind
           // parameter and this file is not one of the two allowed to build SQL
           // by string. The schema comes from `exercise_workspace` either way,
           // never from the request body.
           await client.query(`SELECT set_config('search_path', $1, false)`, [
-            `${context.schema}, public`,
+            workspaceSearchPath(context.schema),
           ]);
         }
 

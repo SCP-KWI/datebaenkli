@@ -159,7 +159,10 @@ $('run').textContent = t('sql.run_key', { key: runKey });
 
 const editor = createEditor({
   parent: $('editor'),
-  doc: 'SELECT * FROM demo.kantone;\n',
+  // Unqualified since 0.14, and that is the point of the line: it is the first
+  // SQL a student ever sees, so it should show the shape they are meant to
+  // write rather than teach them a prefix the app no longer needs.
+  doc: 'SELECT * FROM kantone;\n',
   onRun: () => void run(),
 });
 editor.focus();
@@ -400,20 +403,49 @@ async function loadCatalog() {
   renderTree();
   renderQuota(catalog.quota);
 
+  // What resolves without a qualifier, in the order Postgres resolves it: the
+  // schema this page is working in, then the shared datasets the server put on
+  // every role's `search_path`. Computed once here because two different things
+  // below need to agree with it — autocomplete and the hint layer — and the way
+  // they go wrong when they disagree is not an error message but confident bad
+  // advice.
+  catalog.path = [exercise?.schema ?? catalog.self, ...(catalog.sharedSchemas ?? [])];
+  const columnsOf = (tables) =>
+    Object.fromEntries(tables.map((t) => [t.name, t.columns.map((c) => c.name)]));
+
   // Autocomplete comes from the student's *own* catalog, so it can only ever
   // suggest objects Postgres would let them read. `defaultSchema` is what makes
   // `SELECT * FROM kunden` complete unprefixed, matching search_path — so in an
   // exercise it has to be the exercise's schema, which is what the runner sets
   // `search_path` to. Getting this wrong would complete names that resolve to a
   // different schema than the one the query runs in.
+  //
+  // CodeMirror takes exactly one `defaultSchema`, and since 0.14 there are three
+  // schemas on the path. So the rest are merged in at the top level by hand, in
+  // path order, first writer winning — which reproduces Postgres's own rule that
+  // the earliest schema holding the name is the one you get. `defaultSchema`
+  // still carries the head, so its tables are deliberately *not* added here:
+  // adding them would offer every one of them twice.
+  const bare = {};
+  const headTables = new Set(
+    (catalog.schemas.find((s) => s.name === catalog.path[0])?.tables ?? []).map((t) => t.name),
+  );
+  for (const name of catalog.path.slice(1)) {
+    for (const table of catalog.schemas.find((s) => s.name === name)?.tables ?? []) {
+      if (headTables.has(table.name) || table.name in bare) continue;
+      bare[table.name] = table.columns.map((c) => c.name);
+    }
+  }
+
   editor.setCatalog(
-    Object.fromEntries(
-      catalog.schemas.map((schema) => [
-        schema.name,
-        Object.fromEntries(schema.tables.map((t) => [t.name, t.columns.map((c) => c.name)])),
-      ]),
-    ),
-    exercise?.schema ?? catalog.self,
+    {
+      ...bare,
+      // Last, so a schema always wins a name collision with a table. A qualified
+      // `demo.` that stopped completing is a visibly broken feature; a bare name
+      // that completes from the wrong place is not.
+      ...Object.fromEntries(catalog.schemas.map((schema) => [schema.name, columnsOf(schema.tables)])),
+    },
+    catalog.path[0],
   );
 }
 
@@ -600,6 +632,32 @@ function renderQuota(quota) {
     : t('sql.quota', { used: mb(quota.bytes), total: mb(quota.quotaBytes) });
 }
 
+/**
+ * How the student would have to write this table *from where they are standing*.
+ *
+ * Bare when the search_path resolves the name to this very table, qualified
+ * otherwise — which is not the same as "bare for anything on the path". If Lena
+ * has her own `kantone` and clicks `demo.kantone` in the tree, an unqualified
+ * `SELECT * FROM kantone` returns **hers**: the click would silently show her a
+ * different table from the one she pointed at, and the grid would look right.
+ * So the test is which schema the path reaches *first* for this name.
+ *
+ * The head of the path can never be shadowed — nothing sits in front of it — so
+ * a table in it is always safe to write bare. That short-circuit is also what
+ * makes this correct for the CSV import, which asks about a table it created a
+ * moment ago and which `catalog` has not been reloaded to know about yet.
+ *
+ * With no catalog at all it qualifies. That is the safe direction: a needless
+ * schema name still runs and still returns the right rows.
+ */
+function relationRef(schema, table) {
+  const path = catalog?.path ?? [];
+  if (schema === path[0]) return quote(table);
+  const holds = (name) =>
+    (catalog?.schemas?.find((s) => s.name === name)?.tables ?? []).some((t) => t.name === table);
+  return path.find(holds) === schema ? quote(table) : `${quote(schema)}.${quote(table)}`;
+}
+
 // One delegated listener rather than a handler per table: a teacher's tree can
 // hold several hundred buttons and it is rebuilt on every DDL statement.
 $('tree').addEventListener('click', (event) => {
@@ -613,7 +671,7 @@ $('tree').addEventListener('click', (event) => {
     return;
   }
   const { schema, table } = button.dataset;
-  editor.setValue(`SELECT * FROM ${quote(schema)}.${quote(table)} LIMIT 50;`);
+  editor.setValue(`SELECT * FROM ${relationRef(schema, table)} LIMIT 50;`);
   // Auto-run everything except **another user's** schema.
   //
   // Selecting from someone else's relation executes *their* definition with
@@ -793,7 +851,7 @@ async function importCsv() {
   if (!result) return;
 
   const [schema, table] = result.table.split('.');
-  editor.setValue(`SELECT * FROM ${quote(schema)}.${quote(table)} LIMIT 50;`);
+  editor.setValue(`SELECT * FROM ${relationRef(schema, table)} LIMIT 50;`);
   // The status is set *after* the run, not before: `run()` writes its own
   // ("1 Anweisung · 3 ms"), and how many rows arrived is the more useful of
   // the two to be left looking at.
