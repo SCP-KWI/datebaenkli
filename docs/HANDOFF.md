@@ -3,18 +3,22 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-09-02 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.15.0`** — §26, a student-flow change: the `/uebungen` card no longer
-dumps the whole task above its own button, and the task on the workbench expands
-on a chevron and collapses when the student starts typing. Front end only, no
-migration.
+is on **`0.15.1`** — §26 and §27, both student-flow and both front end only, no
+migration. §26: the `/uebungen` card no longer dumps the whole task above its own
+button, and the task on the workbench expands on a chevron and collapses when the
+student starts typing. §27: the table pane follows the student — exercise
+workspaces no longer clutter the playground, and an exercise that brought its own
+tables shows only those.
 
-**Deploy §25 with it or before it — 0.14.0 is broken in production.** 0.14.0 put
-the shared schemas on the *fixture* path as well as the query path, so any
-exercise whose setup script names a table before creating it —
-`DROP TABLE IF EXISTS artikel;` is the ordinary case — now resolves that name
-to `demo.artikel`, fails `42501`, and rolls the whole materialisation back.
-Students open the exercise and get an **empty workspace**. Ship 0.14.1, then
-have the affected students press *Tabellen zurücksetzen* (§25c).
+**0.14.1 and 0.15.0 are deployed and confirmed** — the author reports exercises
+materialising correctly again and production reading `0.15.0`.
+
+§25 was the regression before them, now shipped: 0.14.0 had put the shared
+schemas on the *fixture* path as well as the query path, so any exercise whose
+setup script named a table before creating it — `DROP TABLE IF EXISTS artikel;`
+is the ordinary case — resolved it to `demo.artikel`, failed `42501`, and rolled
+the whole materialisation back. Students opened the exercise to an **empty
+workspace**.
 
 §24 is the feature underneath it: **students no longer type
 `demo.` or `tonspur.`** The two shared datasets are on every role's
@@ -7021,3 +7025,73 @@ container are cheaper and need no bundle.
 - `npm run typecheck` clean; 98 front-end tests pass, `pages.test.mjs` included —
   no inline handler, no inline `style=`, and the top bar still byte-identical
   across all five pages.
+
+---
+
+## 27. The table pane follows the student — 0.15.1 (2026-09-02)
+
+Reported by the author: "it confuses students that they can see the tables of
+their exercises when not inside an exercise."
+
+`catalog.read` returns every schema the caller can read, and for a student with
+four exercises open that is five schemas of their own in one pane — their
+playground plus `x3_…`, `x4_…`, `x5_…`. The pane could not answer "which of
+these is my database", and the names do not help.
+
+### 27a. The rule
+
+`visibleSchemas()` in `sql.js`. **Presentation only** — nothing here is a
+boundary, `catalog.read` already ran as the student and Postgres already decided
+what is readable. A schema hidden here stays perfectly queryable if typed.
+
+| Where | Pane shows |
+|---|---|
+| Playground | own schema, `demo`, `tonspur`, `public` — **not** the caller's exercise workspaces |
+| Inside an exercise **with** its own tables | that exercise, alone |
+| Inside an exercise **with no** tables of its own | that exercise, plus `demo`, `tonspur`, `public` |
+
+The third row is the author's choice from three offered, and it is the one that
+survives the case the other two break. "Always hide the shared data inside an
+exercise" empties the pane for the exercise that has no fixture at all and whose
+whole task is *"answer these questions about `tonspur`"* — precisely where the
+shared data is the point. **Having its own tables is the signal that an exercise
+is self-contained**, and it needs no new field to read it.
+
+### 27b. Autocomplete and the hint layer are deliberately not filtered
+
+They follow the `search_path`, which still resolves `demo` and `tonspur` inside
+an exercise (0.14). Filtering them too would look consistent and would reinstate
+exactly the failure §24 exists to prevent: a completion that does not appear for
+a name that *works*.
+
+Verified in a browser, and this pair is the whole point: inside an exercise whose
+pane lists only its own two tables, `SELECT count(*) FROM wiedergabe` completes
+from `wieder` and answers **77722**. The tree is "what is worth looking at"; the
+path is what the query will do. Different jobs, and the tree is the one that gets
+to be opinionated.
+
+### 27c. Other people's schemas fall through both rules
+
+Which is what keeps a teacher's class-folded view (0.13.0) working with no case
+for it: the filter only ever removes the *caller's own* workspaces. Checked as a
+teacher — top level is `t_schaffner`, `demo`, `public`, `tonspur`, `k3a — Klasse
+3a`, and inside the class fold the student's playground **and** their three
+exercise workspaces, which is how a teacher reads their work.
+
+A teacher's own exercise workspaces are hidden from their own top level by the
+same rule, and inside an exercise a teacher sees only that exercise. That is the
+rule applied consistently rather than a special case.
+
+### 27d. Verified
+
+All in a browser against the dev cluster, as a real student and a real teacher:
+
+- playground → `u_k3a_muster_lena`, `demo`, `public`, `tonspur`; the three
+  `x*_u_k3a_muster_lena` gone;
+- exercise with a fixture → `Übung: Übung 1: Insert/Update/Delete` alone, its two
+  tables under it;
+- exercise without one → `demo`, `public`, `tonspur`, `Übung: Übung 3: Nur
+  Tonspur`;
+- teacher → §27c above, unchanged;
+- the pane stays filtered after a query, which is when `renderTree` re-runs;
+- `npm run typecheck` clean, 77 front-end tests pass including `pages.test.mjs`.

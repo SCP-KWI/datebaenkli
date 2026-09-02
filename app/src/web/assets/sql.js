@@ -573,6 +573,57 @@ const foldable = (key, fallback, summary, body, cls = '') =>
     cls ? ` class="${cls}"` : ''
   }>${summary}${body}</details>`;
 
+/**
+ * Which schemas the tree shows — 0.15.1.
+ *
+ * **Presentation only.** Nothing here is a boundary: `catalog.read` already ran
+ * as the student and Postgres already decided what they may read. This decides
+ * what is worth *looking at* from where they are standing, and a name hidden
+ * here is still perfectly queryable if they type it.
+ *
+ * Two rules, from a real complaint each:
+ *
+ * **In the playground, your own exercise workspaces are hidden.** A student with
+ * four exercises open had five schemas of their own in the pane and no way to
+ * tell which one the editor was pointing at — they are `x7_u_k3a_muster_lena`,
+ * and the answer to "which of these is my database" was not on screen. An
+ * exercise's tables belong to the exercise, and that is where they appear.
+ *
+ * **Inside an exercise you see the exercise, and the shared data only if the
+ * exercise brought no tables of its own.** The plain version of this rule —
+ * always hide `demo`/`tonspur`/`public` — breaks the exercise that has no
+ * fixture at all and whose whole task is "answer these questions about
+ * `tonspur`": the pane would be empty, in the one case where the shared data is
+ * the entire point. Having its own tables is exactly the signal that the
+ * exercise is self-contained.
+ *
+ * **Autocomplete and the hint layer are deliberately not filtered.** They follow
+ * the `search_path` (0.14), which still resolves `demo` and `tonspur` inside an
+ * exercise, and a completion that fails to appear for a name that *works* is the
+ * failure mode that rule exists to prevent. Offering `kantone` to a student who
+ * has typed `kant` is help; a tree listing eleven `tonspur` tables beside a
+ * four-table exercise is clutter. They are different jobs.
+ *
+ * Other people's schemas are untouched, which is what keeps a teacher's
+ * class-folded view (0.13.0) working: those are never the caller's own, so they
+ * fall through both rules. Inside an exercise a teacher sees only that
+ * exercise, which is the same rule applied consistently rather than a case.
+ */
+function visibleSchemas() {
+  const all = catalog?.schemas ?? [];
+  const mine = new Set((catalog?.exercises ?? []).map((e) => e.schema));
+  // Null when the page is not in an exercise — and also when opening one
+  // failed, where falling back to the playground view beats an empty pane.
+  const here = exercise?.schema ?? null;
+
+  if (here === null) return all.filter((s) => !mine.has(s.name));
+
+  const workspace = all.find((s) => s.name === here);
+  const shared = new Set([...(catalog?.sharedSchemas ?? []), 'public']);
+  const broughtNothing = (workspace?.tables?.length ?? 0) === 0;
+  return all.filter((s) => s.name === here || (broughtNothing && shared.has(s.name)));
+}
+
 function renderTree() {
   $('tree').className = '';
   /**
@@ -591,10 +642,11 @@ function renderTree() {
    * — which is what "this student's schema is open" ought to mean, and is the
    * reason the key is the schema name rather than the position in the tree.
    */
+  const shown = visibleSchemas();
   const grouped = new Set((catalog.classes ?? []).flatMap((c) => c.schemas));
-  const byName = new Map(catalog.schemas.map((s) => [s.name, s]));
+  const byName = new Map(shown.map((s) => [s.name, s]));
 
-  const ungrouped = catalog.schemas.filter((s) => !grouped.has(s.name)).map(renderSchema);
+  const ungrouped = shown.filter((s) => !grouped.has(s.name)).map(renderSchema);
 
   const classes = (catalog.classes ?? []).map((klass) => {
     const schemas = klass.schemas.filter((name) => byName.has(name));
