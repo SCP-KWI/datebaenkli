@@ -595,6 +595,8 @@ export default {
   'ex.build_failed': 'Failed on “{label}”: {message}',
 
   'ex.show_task': 'Task',
+  'ex.expand_task': 'Show the whole task',
+  'ex.collapse_task': 'Collapse the task',
   'ex.reset_tables': 'Reset the tables',
   'ex.hand_in': 'Hand in',
   'ex.leave': 'My own database',

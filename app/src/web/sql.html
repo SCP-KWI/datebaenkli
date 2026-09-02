@@ -140,12 +140,22 @@
 
           The task text is rendered by `markdown.js` into `#exTaskBody`, which is
           the only `innerHTML` on this page carrying text another person wrote.
+
+          `#exTask` expands it (0.15). Its `aria-label` says which way it points,
+          so it depends on state and therefore carries **no** `data-i18n-attr` —
+          `sql.js` is the only thing that knows, exactly as the theme toggle
+          above. The visible word next to the chevron does not change and is
+          translated the ordinary way.
         -->
         <section id="exercise" hidden class="ex-bar">
           <div class="hstack">
             <span class="eyebrow" data-i18n="ex.eyebrow">Übung</span>
             <strong id="exTitle"></strong>
-            <button id="exTask" class="small" data-i18n="ex.show_task">Aufgabe</button>
+            <button id="exTask" type="button" class="small ex-toggle"
+                    aria-expanded="false" aria-controls="exTaskBody">
+              <span data-i18n="ex.show_task">Aufgabe</span
+              ><span class="mi" aria-hidden="true">expand_more</span>
+            </button>
             <button id="exReset" class="small btn-danger" data-i18n="ex.reset_tables">
               Tabellen zurücksetzen
             </button>

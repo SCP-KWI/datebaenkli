@@ -278,13 +278,8 @@ async function mountExercise() {
   $('reset').hidden = true;
   $('exTitle').textContent = exercise.title;
   $('exTaskBody').innerHTML = renderMarkdown(exercise.taskMd);
-  // Collapsed by default: the task is why they are here, but the editor is
-  // where they work, and a long task would push it off the screen every reload.
-  $('exTaskBody').hidden = false;
+  wireTaskToggle();
 
-  $('exTask').onclick = () => {
-    $('exTaskBody').hidden = !$('exTaskBody').hidden;
-  };
   $('exLeave').onclick = () => (location.href = '/sql');
   $('exReset').onclick = () => void resetExercise();
   $('exSubmit').onclick = () => handIn();
@@ -292,6 +287,71 @@ async function mountExercise() {
   exStatus(t('ex.opening'));
   await openExercise();
   await loadCatalog();
+}
+
+/**
+ * The task: a peek by default, the whole thing on demand — 0.15.
+ *
+ * Two states, not three. The peek is `18vh` of scrollable text (app.css has the
+ * arithmetic); expanding lifts that cap so a long task can be *read* rather than
+ * scrolled through a letterbox. There is deliberately no "hide it completely":
+ * the peek is already small, and a third state is a third thing to explain to a
+ * fifteen-year-old who is looking for where to type.
+ *
+ * **Typing collapses it**, which is the half that makes the expand safe to
+ * offer. Without it a student expands the task, starts writing SQL against an
+ * editor squeezed into what is left, and the fix — press the arrow again — is
+ * the one thing they are not thinking about. `keydown` rather than `focus`:
+ * clicking into the editor to put the cursor somewhere while still reading the
+ * task is a real thing to do, and typing is not.
+ *
+ * The control hides itself when the task already fits, because a chevron that
+ * visibly does nothing is worse than no chevron. Measured only while collapsed —
+ * expanded, `clientHeight` has grown to meet `scrollHeight` and the question
+ * answers itself wrongly.
+ */
+function wireTaskToggle() {
+  const bar = $('exercise');
+  const button = $('exTask');
+  const body = $('exTaskBody');
+
+  const setExpanded = (open) => {
+    bar.classList.toggle('ex-open', open);
+    button.setAttribute('aria-expanded', String(open));
+    button.setAttribute('aria-label', t(open ? 'ex.collapse_task' : 'ex.expand_task'));
+  };
+
+  const syncAffordance = () => {
+    if (bar.classList.contains('ex-open')) return;
+    // +1 for sub-pixel line heights, which otherwise report a one-pixel
+    // overflow on a task that fits perfectly.
+    button.hidden = body.scrollHeight <= body.clientHeight + 1;
+  };
+
+  setExpanded(false);
+  syncAffordance();
+  window.addEventListener('resize', syncAffordance);
+
+  button.onclick = () => {
+    setExpanded(button.getAttribute('aria-expanded') !== 'true');
+    syncAffordance();
+  };
+
+  // `keydown` *and* `input`, which are not the same net. keydown is the one that
+  // makes it feel right — the task steps aside on the first key, before the
+  // character has even landed — but it misses every way of putting text in that
+  // is not a keystroke: paste from the right-click menu, drag-and-drop, IME
+  // composition. `input` catches those and fires on nothing else. Registering
+  // both on the container is cheaper than either a CodeMirror update listener
+  // (which would mean touching the bundle) or picking one and being wrong for
+  // the student who pastes.
+  for (const event of ['keydown', 'input']) {
+    $('editor').addEventListener(event, () => {
+      if (!bar.classList.contains('ex-open')) return;
+      setExpanded(false);
+      syncAffordance();
+    });
+  }
 }
 
 async function resetExercise() {

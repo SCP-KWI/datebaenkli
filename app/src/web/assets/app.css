@@ -1989,12 +1989,54 @@ body[data-page='sql'] .ex-bar {
 }
 /* 18vh, not more. The bar sits above the editor in a grid whose editor row has
    an 8rem floor, so every pixel the task takes on a short screen comes straight
-   out of where the student types. The "Aufgabe" button collapses it entirely,
-   which is the answer for a long task — not a taller default. */
+   out of where the student types. The chevron lifts the cap for as long as they
+   are reading — that is the answer for a long task, not a taller default. */
 body[data-page='sql'] .ex-bar .ex-task {
   margin-top: 0.5rem;
   max-height: 18vh;
   overflow-y: auto;
+}
+
+/* Expanded (0.15). 60vh and not `none`: the editor's row has an 8rem floor, so
+   an unbounded task on a long exercise would push the toolbar and the editor off
+   a laptop screen and the student would be reading with nowhere to type. The cap
+   keeps both on screen and lets the task scroll inside itself. */
+body[data-page='sql'] .ex-bar.ex-open .ex-task {
+  max-height: 60vh;
+}
+
+.ex-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+.ex-toggle .mi {
+  font-size: 18px;
+  transition: transform 0.15s ease;
+}
+.ex-toggle[aria-expanded='true'] .mi {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ex-toggle .mi {
+    transition: none;
+  }
+}
+
+/* The student's card on /uebungen (0.15).
+
+   A peek, not the task. The card used to render the whole thing above its
+   button, so a student on an exercise of any length scrolled past all of it to
+   reach "Bearbeiten" — which is the one thing on the card they came for. The
+   button now sits directly under the title and this is what is left over.
+   `overflow: hidden` rather than a line clamp, because the task is rendered
+   markdown: `-webkit-line-clamp` needs `display: -webkit-box`, which flattens
+   the block layout of any task with more than one paragraph. */
+.ex-card .ex-preview {
+  max-height: 4.2em;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
+  mask-image: linear-gradient(to bottom, #000 60%, transparent);
 }
 
 @media (max-width: 900px) {

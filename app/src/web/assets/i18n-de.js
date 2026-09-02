@@ -679,6 +679,8 @@ export default {
 
   // The bar on /sql.
   'ex.show_task': 'Aufgabe',
+  'ex.expand_task': 'Ganze Aufgabe zeigen',
+  'ex.collapse_task': 'Aufgabe einklappen',
   'ex.reset_tables': 'Tabellen zurücksetzen',
   'ex.hand_in': 'Abgeben',
   'ex.leave': 'Eigene Datenbank',

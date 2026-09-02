@@ -146,6 +146,15 @@ async function send(url, options) {
 const when = (value) => (value ? formats().dateTime(new Date(value)) : '—');
 
 // --- the student's list ------------------------------------------------------
+//
+// **The button comes before the task, and the task is a peek** (0.15). It used
+// to be the other way round, and the card therefore rendered an entire exercise
+// above the one control a student came to the page to press: on anything longer
+// than a paragraph they scrolled past all of it to reach "Bearbeiten". The task
+// is not what this page is *for* — it is the shelf you take the exercise off —
+// and the whole thing is one click away in the editor, where it can now be
+// expanded (`sql.js`'s `wireTaskToggle`). What is left here is enough to tell
+// two exercises apart, which is all a list has to do.
 
 function renderMine() {
   if (list.length === 0) {
@@ -166,7 +175,6 @@ function renderMine() {
             }
           </div>
           <p class="sub">${esc(t('ex.by', { name: exercise.teacherName }))}</p>
-          <div class="ex-task">${renderMarkdown(exercise.taskMd)}</div>
           <div class="hstack ex-actions">
             <a class="btn btn-primary" href="/sql?uebung=${encodeURIComponent(exercise.id)}"
                >${esc(t('ex.work_on'))}</a>
@@ -184,6 +192,7 @@ function renderMine() {
                 : ''
             }
           </div>
+          <div class="ex-task ex-preview">${renderMarkdown(exercise.taskMd)}</div>
         </article>`,
     )
     .join('');

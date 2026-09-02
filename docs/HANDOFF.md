@@ -3,10 +3,15 @@
 Running state document. Update it at the end of every working session.
 
 **Last updated:** 2026-09-02 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.14.1`** — **§25 first, it is a regression fix and 0.14.0 is broken in
-production.** 0.14.0 put the shared schemas on the *fixture* path as well as the
-query path, so any exercise whose setup script names a table before creating it
-— `DROP TABLE IF EXISTS artikel;` is the ordinary case — now resolves that name
+is on **`0.15.0`** — §26, a student-flow change: the `/uebungen` card no longer
+dumps the whole task above its own button, and the task on the workbench expands
+on a chevron and collapses when the student starts typing. Front end only, no
+migration.
+
+**Deploy §25 with it or before it — 0.14.0 is broken in production.** 0.14.0 put
+the shared schemas on the *fixture* path as well as the query path, so any
+exercise whose setup script names a table before creating it —
+`DROP TABLE IF EXISTS artikel;` is the ordinary case — now resolves that name
 to `demo.artikel`, fails `42501`, and rolls the whole materialisation back.
 Students open the exercise and get an **empty workspace**. Ship 0.14.1, then
 have the affected students press *Tabellen zurücksetzen* (§25c).
@@ -6934,3 +6939,85 @@ rule applies *"auch dann, wenn du den Namen ohne Schema davor schreibst"*.
   own copy.
 - `test/search-path.test.mjs` 6/6, and the new case fails against a reverted
   `fixtureSearchPath`.
+
+---
+
+## 26. Straight to the workbench — 0.15.0 (2026-09-02)
+
+Reported by the author: a student opening an exercise "gets to an overview
+first, and there they have to scroll all the way down and click *Bearbeiten*.
+The overview doesn't really help them, as they don't want to read the entire
+exercise before starting."
+
+There was never a separate overview *page* — the "overview" is the card on
+`/uebungen`, and the card rendered the whole task **above** its button. On an
+exercise of any length the one control a student came for was below the fold,
+under text they had not decided to read yet.
+
+### 26a. What changed
+
+**The card is a shelf, not a document.** `renderMine` now puts the primary
+action directly under the title and the task *after* it, clipped to about three
+lines with a fade. Measured against the same exercise before and after: the card
+went from **1058 px to 275 px**, and both cards on the test account fit on one
+1280×800 screen with `Bearbeiten` visible without scrolling.
+
+**The workbench task got a chevron** (`wireTaskToggle` in `sql.js`). It was
+already a `18vh` peek with a button that hid it entirely; the button now expands
+it to `60vh` instead, and:
+
+- the chevron rotates and its `aria-label` says which way it points — so that
+  attribute carries **no** `data-i18n-attr`, per the rule the theme toggle
+  already follows (an attribute that depends on state cannot also be declared in
+  the markup, or the two disagree in whichever mode you are not testing in);
+- **typing collapses it**, which is what makes the expand safe to offer at all;
+- the chevron hides itself when the task already fits, because a control that
+  visibly does nothing is worse than no control.
+
+### 26b. Why a chevron and not a draggable divider
+
+Both were offered. The disclosure won on three counts, and the third is the one
+that decided it:
+
+- `#work` is a grid whose rows are **positional**, with a `:has()` rule that
+  already exists only because inserting the exercise bar shifted every row down
+  one (§the `.ex-bar` comment in `app.css`). A divider means JS-owned row sizes,
+  persistence, touch handling and a minimum — on top of a template that has
+  already been subtly wrong once.
+- A divider is a *mode*: it stays where it was dragged, so a student who pulled
+  it down mid-lesson works in a squeezed editor until they notice and drag it
+  back. The expand is a *read*, and it ends by itself.
+- Reading the task and writing SQL are not simultaneous activities. The state
+  that needs to be adjustable is "am I reading right now", which is a button.
+
+### 26c. `keydown` **and** `input`, which is not belt-and-braces
+
+The first version listened for `keydown` only and it looked correct in a browser
+— because the automation's `type` action inserts text through CDP without
+dispatching key events, the collapse silently did not fire, and the screenshot
+showed an expanded task above freshly typed SQL. Chasing that turned up the real
+gap rather than a test artefact: **every way of entering text that is not a
+keystroke** — paste from the right-click menu, drag-and-drop, IME composition —
+produces no `keydown`. `input` catches those and fires on nothing else.
+
+`keydown` stays because it is what makes it *feel* right: the task steps aside on
+the first key, before the character has landed. Verified both paths separately in
+a browser, with a probe counting events at the container and at `document` in the
+capture phase.
+
+The alternative was a CodeMirror update listener, which means touching
+`editor.entry.js` and rebuilding the one bundled file. Two listeners on the
+container are cheaper and need no bundle.
+
+### 26d. Verified
+
+- **In a browser at 1280×800**, as a real student: collapsed peek 144 px task /
+  169 px editor; expanded 385 px / **128 px**, which is exactly the editor row's
+  `8rem` floor — so expanding never eats the editor. Typing restores 144/169.
+- The chevron is `hidden` on an exercise whose task fits (`Übung 2`), shown on
+  one whose does not (`Übung 1`, 732 px of task).
+- `aria-expanded` and the German `aria-label` flip on every transition, checked
+  across four consecutive toggles.
+- `npm run typecheck` clean; 98 front-end tests pass, `pages.test.mjs` included —
+  no inline handler, no inline `style=`, and the top bar still byte-identical
+  across all five pages.
