@@ -64,7 +64,7 @@
 import type pg from 'pg';
 import { allocateIdentifier, workspaceSchemaBase } from '../auth/identifiers.js';
 import type { Db, Queryable } from '../db/query.js';
-import { workspaceSearchPath } from '../db/search-path.js';
+import { fixtureSearchPath } from '../db/search-path.js';
 import { audit } from './audit.js';
 import { type ColumnType, coerce, parseCsv, usesDecimalComma } from './csv.js';
 import { createAndFill, foldRelationName, MAX_IMPORT_COLUMNS } from './import.js';
@@ -847,14 +847,30 @@ export function makeExerciseService(deps: ExerciseServiceDeps) {
    * "reset" and "open" both look like they might help and neither is obviously
    * right, whereas an empty workspace has exactly one next step.
    *
-   * `search_path` is the workspace first and **not** `"$user"`, so an
-   * unqualified `CREATE TABLE` in a teacher's script lands in the exercise
-   * rather than in the student's own playground. The shared datasets follow it
-   * (0.14), which is what lets a fixture be written as
-   * `CREATE TABLE top_songs AS SELECT … FROM song` — the same names the student
-   * will then use unqualified in the same workspace. Order matters and the
-   * workspace winning is the point: a script that creates its own `song` and
-   * then inserts into it reaches its own, not `tonspur`'s.
+   * `search_path` is **the workspace alone** — not `"$user"`, and not the shared
+   * datasets either. An unqualified `CREATE TABLE` in a teacher's script lands
+   * in the exercise rather than in the student's own playground, and every other
+   * unqualified name in that script means "this exercise" and can mean nothing
+   * else.
+   *
+   * **0.14.0 put `demo` and `tonspur` on this path and it was a bug** (HANDOFF
+   * §25). A fixture that opens with `DROP TABLE IF EXISTS artikel;` — an
+   * ordinary, careful thing for a teacher to write — resolved `artikel` to
+   * `demo.artikel`, because the workspace does not have that table *yet*. The
+   * student is not its owner, so `42501`, and one statement's failure rolls the
+   * whole materialisation back: every student in the class opened the exercise
+   * and got an empty workspace. `TRUNCATE`, `ALTER`, `INSERT INTO` and
+   * `CREATE INDEX ON` are the same shape.
+   *
+   * The asymmetry with `services/query.ts`, which *does* put the shared schemas
+   * on the path, is the point rather than an oversight. A student's query runs
+   * against a schema that already exists and the shared datasets are read-only
+   * to them, so the worst an unqualified name can do is read the wrong table —
+   * and reading them unqualified is the whole feature. A fixture is DDL run
+   * while the schema is still being built, where the same name resolving
+   * outwards is a privilege error at best. A teacher who wants the shared data
+   * in a fixture qualifies it: `SELECT … FROM tonspur.song`. Authoring is the
+   * right place to be explicit.
    *
    * It is reset in the `finally` for the reason `provision.ts`'s `asRole` gives:
    * node-postgres does not `DISCARD ALL` on release, so a leaked `SET` is handed
@@ -871,7 +887,7 @@ export function makeExerciseService(deps: ExerciseServiceDeps) {
       // A bind parameter cannot be a `SET` target, but `set_config` takes one —
       // which is how this file keeps its promise to build no SQL by string.
       await client.query(`SELECT set_config('search_path', $1, false)`, [
-        workspaceSearchPath(schema),
+        fixtureSearchPath(schema),
       ]);
 
       for (const source of sources) {

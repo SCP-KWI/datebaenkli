@@ -137,8 +137,9 @@ export default {
     'they exist.',
 
   'hint.denied':
-    'You do not have the rights for that. You may do anything in your own schema and read ' +
-    'the `demo` tables — other schemas are closed to you.',
+    'You do not have the rights for that. You may do anything in your own schema; `demo` ' +
+    'and `tonspur` are read-only — including when you write the name without a schema in ' +
+    'front of it. Other schemas are closed to you.',
   'hint.aborted':
     'An earlier statement in this script failed. Everything after it is skipped until the ' +
     'transaction ends — fix the first failing statement and run the script again.',

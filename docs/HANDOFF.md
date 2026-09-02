@@ -2,8 +2,16 @@
 
 Running state document. Update it at the end of every working session.
 
-**Last updated:** 2026-09-01 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.14.0`** — §24, and it is the one to read: **students no longer type
+**Last updated:** 2026-09-02 · **Phases 0–10 are DEPLOYED**; the repo
+is on **`0.14.1`** — **§25 first, it is a regression fix and 0.14.0 is broken in
+production.** 0.14.0 put the shared schemas on the *fixture* path as well as the
+query path, so any exercise whose setup script names a table before creating it
+— `DROP TABLE IF EXISTS artikel;` is the ordinary case — now resolves that name
+to `demo.artikel`, fails `42501`, and rolls the whole materialisation back.
+Students open the exercise and get an **empty workspace**. Ship 0.14.1, then
+have the affected students press *Tabellen zurücksetzen* (§25c).
+
+§24 is the feature underneath it: **students no longer type
 `demo.` or `tonspur.`** The two shared datasets are on every role's
 `search_path` now, and on the exercise paths too. **No migration**, so this is
 §7's application-code-only shape — but it is *not* a deploy-and-forget: the
@@ -6818,3 +6826,111 @@ changes; a comment is not an exception.
     `u_k3a_muster_lena.meine_notizen`. That last sentence is §24f's other half
     working: before this change the workspace was not `own`, so the suggestion
     came from the wrong schema.
+
+---
+
+## 25. Exercise distribution broke — 0.14.1 (2026-09-02)
+
+Reported by the author the day after 0.14.0 went out, with a screenshot of a
+teacher's schema browser: a class opened *Übung 1: Insert/Update/Delete* and
+every student's workspace was empty.
+
+**It was §24, and it was the one part of that change nobody asked for.** The
+request was that *students* stop typing `demo.` and `tonspur.`. 0.14.0 also put
+those two schemas on the path a *teacher's fixture* materialises under, on the
+argument that it was "consistent and safe". It was consistent. It was not safe.
+
+### 25a. The mechanism
+
+A fixture that opens with
+
+```sql
+DROP TABLE IF EXISTS artikel;
+CREATE TABLE artikel (…);
+```
+
+is an ordinary, careful thing for a teacher to write. Under 0.14.0 the
+materialisation path was `<workspace>, demo, tonspur, public`, and at the moment
+that first statement runs **the workspace does not have an `artikel` yet** — so
+the name resolves outwards to `demo.artikel`. The student is not its owner:
+
+```
+42501  must be owner of table artikel
+```
+
+`materialise` runs every source in one transaction, deliberately, so that a
+four-table fixture lands whole. One statement's failure therefore rolls back
+*everything* — the tables that had already been created included. The student
+sees an empty schema, the teacher sees 25 empty schemas, and nothing in the log
+says "schema resolution", it says "permission denied".
+
+`TRUNCATE`, `ALTER TABLE`, `INSERT INTO` and `CREATE INDEX ON` are the same
+shape. Any unqualified name a fixture uses *before* creating it reaches out.
+
+### 25b. The fix, and why the three paths are now deliberately not the same
+
+`fixtureSearchPath()` in `db/search-path.ts` — the workspace, alone, which is
+what it was before 0.14.0. The asymmetry is now stated at the function, in that
+file's header, and in `exercise.ts`, because it is the kind of thing a later
+tidy-up removes on sight:
+
+| Path | Contents | Why |
+|---|---|---|
+| Playground (role default) | `"$user", demo, tonspur, public` | reading the shared data unqualified *is* the feature |
+| A student's query in an exercise | `<workspace>, demo, tonspur, public` | same, and the shared schemas are read-only to them |
+| **A teacher's fixture** | **`<workspace>`** | DDL run while the schema is still being built |
+
+The distinction is not "how much do we trust the caller". It is **what the
+schema is at that moment**. A student's query runs against a schema that already
+exists, and the worst an unqualified name can do is *read* the wrong table. A
+fixture runs against a schema that is half-built, where the same name resolving
+outwards is a privilege error at best. A fixture that wants the shared data
+qualifies it — authoring is the right place to be explicit.
+
+`test/search-path.test.mjs` pins it, and pins it as a *difference* rather than
+as a literal, so "make the three consistent" fails the suite instead of the
+lesson.
+
+### 25c. Recovery on production, after deploying
+
+The failed materialisation rolled back, so **no student work was lost** — there
+was never anything in those schemas to lose. The workspace row exists and the
+schema exists; only the tables are missing, so re-opening does nothing (the
+"already materialised" check is the schema, not its contents).
+
+Each affected student presses **Tabellen zurücksetzen** on the exercise, which
+drops and rebuilds the workspace. A teacher can also take the exercise back and
+distribute it again. Only exercises whose fixture used a name before creating it
+are affected; a fixture that only ever `CREATE`s went out fine.
+
+### 25d. What this says about the next change to a search_path
+
+0.14.0 shipped with a unit test, three live tests, a 50-check isolation script
+and a browser pass, and none of them caught this — because every fixture any of
+them used only ever *created* tables. **The hazard was not in the path, it was
+in the order the statements ran.** A fixture that names a table before it exists
+is the whole bug, and no fixture in the repo did that.
+
+The lesson is narrow and worth keeping: when a change widens what an unqualified
+name can resolve to, the test that matters is the one where **the name does not
+exist yet in the schema you expect to win**. That case is invisible in every
+fixture written by someone who already knows the tables are there.
+
+### 25e. Also in 0.14.1
+
+`hint.denied` (42501) named only `demo` and described the rule as being about
+"other schemas". A student who typed `DROP TABLE artikel` never mentioned a
+schema at all, so both locales now name `demo` **and** `tonspur` and say the
+rule applies *"auch dann, wenn du den Namen ohne Schema davor schreibst"*.
+
+### 25f. Verified
+
+- The exact reported case, end to end against the dev cluster: an exercise whose
+  fixture opens `DROP TABLE IF EXISTS artikel;`, distributed to a class, opened
+  by a student — **`42501`, empty workspace before the fix; `materialised: true`
+  and the table present after it.**
+- The student half of §24 is untouched: inside that same exercise,
+  `SELECT count(*) FROM kantone` → 26, `FROM song` → 2644, `FROM artikel` → their
+  own copy.
+- `test/search-path.test.mjs` 6/6, and the new case fails against a reverted
+  `fixtureSearchPath`.

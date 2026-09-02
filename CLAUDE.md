@@ -33,6 +33,17 @@ makes an unqualified `CREATE TABLE` land somewhere they may write and their own
 copy of a name win. `"$user"` stays off the exercise paths — see
 `docs/HANDOFF.md` §3.
 
+**The three paths are deliberately not identical, and 0.14.1 is the bill for
+making two of them so** (`docs/HANDOFF.md` §25). A teacher's fixture
+materialises under the workspace **alone** — no `demo`, no `tonspur` — because
+it is DDL running while the schema is still half-built, so a fixture opening
+`DROP TABLE IF EXISTS artikel;` resolved outwards to `demo.artikel`, failed
+`42501`, and rolled back every table it had already made. A whole school opened
+its exercises to an empty schema. A student's *query* keeps the shared schemas,
+because there the schema already exists and the worst case is reading the wrong
+table. `test/search-path.test.mjs` asserts the difference, not the literal:
+"make the three consistent" is meant to fail the suite.
+
 `docs/HANDOFF.md` §3 lists the other decisions not to silently reverse. Check it
 before changing anything about auth, grants, identifiers or cookies.
 

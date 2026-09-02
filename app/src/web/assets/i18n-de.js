@@ -139,8 +139,9 @@ export default {
     'sich die Tabelle nicht löschen.',
 
   'hint.denied':
-    'Dafür fehlen dir die Rechte. Du darfst in deinem eigenen Schema alles und die ' +
-    '`demo`-Tabellen lesen — andere Schemas sind für dich gesperrt.',
+    'Dafür fehlen dir die Rechte. In deinem eigenen Schema darfst du alles; `demo` und ' +
+    '`tonspur` darfst du nur lesen — auch dann, wenn du den Namen ohne Schema davor ' +
+    'schreibst. Andere Schemas sind für dich gesperrt.',
   'hint.aborted':
     'Eine frühere Anweisung in diesem Skript ist fehlgeschlagen. Alles danach wird ' +
     'übersprungen, bis die Transaktion beendet ist — korrigiere die erste fehlerhafte ' +

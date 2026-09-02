@@ -15,9 +15,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { dist } from './support/meta-db.mjs';
 
-const { PLAYGROUND_SEARCH_PATH, SHARED_SCHEMAS, workspaceSearchPath } = await import(
-  dist('db/search-path.js')
-);
+const { PLAYGROUND_SEARCH_PATH, SHARED_SCHEMAS, fixtureSearchPath, workspaceSearchPath } =
+  await import(dist('db/search-path.js'));
 
 const parts = (path) => path.split(',').map((p) => p.trim());
 
@@ -50,6 +49,28 @@ test('an exercise path never carries "$user"', () => {
 test('public is last on both, so nothing shadows a student by accident', () => {
   assert.equal(parts(PLAYGROUND_SEARCH_PATH).at(-1), 'public');
   assert.equal(parts(workspaceSearchPath('x7_u_lena')).at(-1), 'public');
+});
+
+test('a fixture materialises in its workspace and nowhere else', () => {
+  // The 0.14.1 regression, pinned (HANDOFF §25). `demo` and `tonspur` on this
+  // path meant a fixture opening with `DROP TABLE IF EXISTS artikel;` resolved
+  // `artikel` to `demo.artikel` — the workspace has no such table *yet* — and
+  // `42501 must be owner` rolled the whole materialisation back. Every student
+  // in the class opened the exercise and got an empty schema.
+  //
+  // So this is not "the same as workspaceSearchPath minus a bit". It is one
+  // schema, and any shared name appearing here is the bug coming back.
+  const path = fixtureSearchPath('x7_u_k3a_muster_lena');
+  assert.equal(path, 'x7_u_k3a_muster_lena');
+  for (const shared of SHARED_SCHEMAS) {
+    assert.ok(!parts(path).includes(shared), `${shared} must not be on the fixture path`);
+  }
+  assert.ok(!parts(path).includes('public'));
+  assert.notEqual(
+    path,
+    workspaceSearchPath('x7_u_k3a_muster_lena'),
+    'the query path and the fixture path are deliberately different — see §25',
+  );
 });
 
 test('the playground path is byte-identical to what the drift check compares', () => {

@@ -38,6 +38,12 @@
  * being an honest promise. That predates this file (HANDOFF §9) and adding the
  * shared schemas does not soften it: they are read-only, so nothing an exercise
  * can type reaches anything of the student's that a reset would not restore.
+ *
+ * **The shared schemas are absent from `fixtureSearchPath`, and that asymmetry
+ * is the most important thing in this file** (0.14.1, HANDOFF §25). It is not
+ * an oversight and it is not tidiness pending a cleanup: putting them there
+ * broke exercise distribution for a whole school. The reason is at that
+ * function. Do not "make the three paths consistent".
  */
 
 import { assertPlainIdent } from './ident.js';
@@ -71,7 +77,7 @@ export const SHARED_SCHEMAS: readonly string[] = ['demo', 'tonspur'].map(assertP
 export const PLAYGROUND_SEARCH_PATH = ['"$user"', ...SHARED_SCHEMAS, 'public'].join(', ');
 
 /**
- * The path a query or a fixture runs under inside an exercise workspace.
+ * The path a student's *query* runs under inside an exercise workspace.
  *
  * `schema` comes from `exercise_workspace` and reaches Postgres as a bind
  * parameter to `set_config`, never as SQL text — which is why this returns a
@@ -79,4 +85,34 @@ export const PLAYGROUND_SEARCH_PATH = ['"$user"', ...SHARED_SCHEMAS, 'public'].j
  */
 export function workspaceSearchPath(schema: string): string {
   return [schema, ...SHARED_SCHEMAS, 'public'].join(', ');
+}
+
+/**
+ * The path a teacher's *fixture* materialises under: the workspace, alone.
+ *
+ * **Not `workspaceSearchPath`, and 0.14.0 is why** (HANDOFF §25). Putting the
+ * shared datasets on this path broke exercise distribution outright: a fixture
+ * that opens with `DROP TABLE IF EXISTS artikel;` resolved `artikel` to
+ * `demo.artikel`, because the workspace does not have that table *yet*. The
+ * student is not its owner, so `42501` — and one statement's failure rolls the
+ * whole materialisation back, so every student in the class opened the exercise
+ * and got an empty schema. `TRUNCATE`, `ALTER`, `INSERT INTO` and
+ * `CREATE INDEX ON` are the same shape.
+ *
+ * The two paths differ because the two situations do. A student's query runs
+ * against a schema that already exists, and the shared datasets are read-only
+ * to them, so the worst an unqualified name can do is read the wrong table —
+ * and reading them unqualified is the entire feature. A fixture is DDL run
+ * while the schema is still being built, where a name resolving *outwards* is a
+ * privilege error at best and a write to the wrong place at worst.
+ *
+ * A fixture that wants the shared data qualifies it: `FROM tonspur.song`.
+ * Authoring is the right place to be explicit.
+ *
+ * A function rather than the caller passing `schema` straight through, so that
+ * the difference between the two paths is stated once, here, next to the reason
+ * — and so `test/search-path.test.mjs` can assert it.
+ */
+export function fixtureSearchPath(schema: string): string {
+  return schema;
 }
