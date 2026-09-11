@@ -7095,3 +7095,53 @@ All in a browser against the dev cluster, as a real student and a real teacher:
 - teacher → §27c above, unchanged;
 - the pane stays filtered after a query, which is when `renderTree` re-runs;
 - `npm run typecheck` clean, 77 front-end tests pass including `pages.test.mjs`.
+
+---
+
+## 28. `SQL-Editor` became `Demo-Tabellen` — 0.15.2 (2026-09-11)
+
+Author's report from the classroom: students could not tell the `SQL-Editor` tab
+from the `Übungen` tab. Both lead to SQL, both have tables, and the name of the
+first describes the *tool* while the name of the second describes the *work* —
+so the nav offered no answer to "where am I supposed to be right now".
+
+The rename says what is behind the tab instead of what you do there:
+`Demo-Tabellen` / `Demo tables`. It is one string, `nav.sql`, and its five
+hard-coded fallbacks in the page markup (`home`, `sql`, `roster`, `lesson`,
+`uebungen`). The key name stays `nav.sql` — the route is still `/sql`, and
+renaming the key would have touched `tour.js`, `util.js`'s `admin` array and the
+`#nav-sql` id for no gain.
+
+### 28a. What deliberately did *not* change
+
+- **The route.** `/sql` stays, and so does `/sql?uebung=<id>`. A label is not a
+  URL, and every deep link a teacher has written down still works.
+- **The word "Editor" everywhere else.** `sql.empty`, `ex.open_editor`,
+  `ex.hand_in_what`, `ex.hand_in_empty` all mean the text box, which really is
+  an editor. Only the *destination* was ambiguous, not the widget.
+- **`tour.t.sql` / `tour.s.sql`.** Neither quotes the label; both describe the
+  page ("dein Arbeitsplatz"), which is still true.
+
+### 28b. The handbooks, and the part that is now stale
+
+Both sources were updated and rebuilt (`node docs/handbook-src/build.mjs`).
+Two of the five prose hits were *not* a straight swap: "Bearbeiten bringt dich in
+den SQL-Editor" and its teacher twin now read "in den Editor", because opening an
+exercise lands on `/sql` but emphatically **not** in the demo tables — pointing a
+student at a tab called `Demo-Tabellen` to do their exercise would reinstate the
+exact confusion this release removes.
+
+**The screenshots in `docs/handbuch.html` still show `SQL-Editor` in the nav**
+(`02-uebersicht`, `10-editor` and any other crop that includes the top bar).
+`build.mjs` inlines `docs/handbook-src/shots/*` as-is; it cannot regenerate them.
+Re-shooting them needs a browser against a seeded cluster and the `rects.json`
+mark coordinates re-measured, which is a session of its own — the text is right
+and the pictures are one release behind.
+
+### 28c. Verified
+
+- Full suite: 490 tests, **395 pass, 0 fail**, 95 skipped (the live suites — no
+  cluster). `npm run typecheck` clean.
+- `pages.test.mjs` passes, which is what would have caught a broken page.
+- No TypeScript was touched; the change is five HTML labels, two locale strings
+  and the handbook prose.

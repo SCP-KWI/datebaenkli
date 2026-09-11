@@ -376,7 +376,7 @@ export default {
   'common.role_teacher': 'Lehrperson',
   'common.role_student': 'Lernende:r',
 
-  'nav.sql': 'SQL-Editor',
+  'nav.sql': 'Demo-Tabellen',
   'nav.lesson': 'Lektion',
   'nav.roster': 'Klassen',
   'nav.exercises': 'Übungen',

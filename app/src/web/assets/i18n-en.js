@@ -334,7 +334,7 @@ export default {
   'common.role_teacher': 'Teacher',
   'common.role_student': 'Student',
 
-  'nav.sql': 'SQL editor',
+  'nav.sql': 'Demo tables',
   'nav.lesson': 'Lesson',
   'nav.roster': 'Classes',
   'nav.exercises': 'Exercises',
