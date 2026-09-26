@@ -2,8 +2,14 @@
 
 Running state document. Update it at the end of every working session.
 
-**Last updated:** 2026-09-02 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.15.1`** — §26 and §27, both student-flow and both front end only, no
+**Last updated:** 2026-09-26 · **Phases 0–10 are DEPLOYED**; the repo
+is on **`0.16.0`** — §29, a **teach migration** (`004_pass_ohne_ticket_typ.sql`,
+one `DROP COLUMN` on `tonspur.pass`), so the next deploy is §7's schema-change
+shape, not the code-only one; §29c is the runbook. Production read `0.15.2` on
+2026-09-26 before this session; `0.15.2` (§28) is the tab rename, deployed
+2026-09-11.
+
+Before that: `0.15.1` — §26 and §27, both student-flow and both front end only, no
 migration. §26: the `/uebungen` card no longer dumps the whole task above its own
 button, and the task on the workbench expands on a chevron and collapses when the
 student starts typing. §27: the table pane follows the student — exercise
@@ -7145,3 +7151,77 @@ and the pictures are one release behind.
 - `pages.test.mjs` passes, which is what would have caught a broken page.
 - No TypeScript was touched; the change is five HTML labels, two locale strings
   and the handbook prose.
+
+---
+
+## 29. `pass` loses `ticket_typ` — 0.16.0 (2026-09-26)
+
+The Lektionsreihe reached Block D and the lesson that uses the second source
+(L9, "Daten-Detektive": `pass` × `nutzerin` over the four-tuple, `scan` for the
+movement profile). While the numbers for it were being checked, the column
+`pass.ticket_typ` turned out to contradict the scans it sits beside: **124 of
+the 129 rows marked `Tagespass` were scanned on more than one day, 89 of them on
+all three.** The column and the scans had been generated independently.
+
+No lesson query reads the column. But L9 is *about* what data claims and what it
+can back up, and a student who spots a three-day "Tagespass" has found a hole in
+the dataset instead of the one the lesson planted. The teacher's decision
+(2026-09-26): the column goes.
+
+### 29a. A migration, not a regenerated 003
+
+`003_tonspur.sql` is applied on production and `migrate.ts` holds its checksum
+(§7, and the outage that taught it). Its own header says a corrected dataset is a
+new migration, so this is one: `teach/004_pass_ohne_ticket_typ.sql`, a single
+`ALTER TABLE tonspur.pass DROP COLUMN ticket_typ` plus a refreshed table comment.
+**`tools/tonspur-sql.mjs` still lists the column in its SPEC** and that is
+deliberate — the script documents how 003 was produced from the CSV it was
+produced from. A regenerated 003 would be a file the ledger refuses.
+
+The steady state is therefore *003 creates the column, 004 drops it*, and the
+only place that says the column must stay gone is the test.
+
+### 29b. The test pins the column list
+
+`test/sql.test.mjs`, in 'tonspur: the second source shares no key with the
+first': `pass` must have exactly `id, vorname, nachname, geburtsdatum, plz`, in
+that order. The existing assertions (no `%nutzerin%` column, 260 four-tuple
+matches) did not depend on `ticket_typ` and still pass; the new one is what turns
+"somebody regenerated the export with the column back in" from a silent change
+into a red test.
+
+### 29c. For the next session — deploying this
+
+**§7's schema-change shape**, the same as §21f, and shorter because it drops one
+column of a read-only dataset:
+
+1. `curl -s https://datebaenkli.schaffner.xyz/api/version` first — expect
+   `0.15.2`.
+2. `db/backup.sh` and its `--check`. A dropped column does not come back with an
+   image rollback; the dump is the only way back.
+3. `git pull && docker compose build datebaenkli-app && docker compose up -d`.
+   **`up` without `build` proves nothing** (§4vv).
+4. The boot log must say `applied migration 004_pass_ohne_ticket_typ.sql`, and a
+   second boot (`docker compose restart datebaenkli-app`) must read
+   `teach 0 applied / 4 current`.
+5. `curl /api/version` again: **both** fields move, to `0.16.0`.
+6. The check specific to this release, as a student, because the grant on the
+   table is what 004 must not have disturbed:
+
+   ```sql
+   SELECT * FROM pass LIMIT 1;                      -- five columns, no ticket_typ
+   SELECT count(*) FROM pass JOIN nutzerin
+     ON pass.vorname = nutzerin.vorname AND pass.nachname = nutzerin.nachname
+    AND pass.geburtsdatum = nutzerin.geburtsdatum AND pass.plz = nutzerin.plz;  -- 260
+   ```
+
+No `.env` change, no new configuration, no dependency, no front-end change.
+`postbuild` copies `src/db/sql` wholesale, so the file is in the image without a
+Dockerfile edit — the same argument as §21f.
+
+**Where it was verified before the deploy:** `test/sql.test.mjs` in PGlite
+(30 pass, 0 fail — 004 parses and executes after 003, and the column list holds),
+`npm run typecheck` clean. Nothing on PostgreSQL 17, nothing on the server; the
+boot-log line in step 4 is what settles that, and `DROP COLUMN` on a 380-row
+table is not where a version difference would show.
+

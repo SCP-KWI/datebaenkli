@@ -417,6 +417,21 @@ test('tonspur: the second source shares no key with the first', async () => {
        AND column_name LIKE '%nutzerin%'`);
   assert.deepEqual(cols, [], 'pass must not gain a foreign key into nutzerin');
 
+  // 004 dropped `ticket_typ`: the column contradicted the scans (124 of 129
+  // "Tagespass" rows were scanned on more than one day). Pinning the full list
+  // is what stops a regenerated export from bringing it back — the drop is a
+  // migration, so a 003 with the column and a 004 without it is the steady
+  // state, and this is the only place that says so.
+  const { rows: all } = await db.query(`
+    SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'tonspur' AND table_name = 'pass'
+     ORDER BY ordinal_position`);
+  assert.deepEqual(
+    all.map((r) => r.column_name),
+    ['id', 'vorname', 'nachname', 'geburtsdatum', 'plz'],
+    'pass has exactly the five columns Lektion 9 joins on (ticket_typ was dropped in 004)',
+  );
+
   const { rows } = await db.query(`
     SELECT count(*)::int c
       FROM tonspur.pass p
