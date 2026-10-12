@@ -68,6 +68,7 @@ const app = Fastify({
       paths: [
         'req.headers.cookie',
         'req.headers.authorization',
+        'res.headers["x-dbk-token"]',
         'res.headers["set-cookie"]',
         'password',
         'newPassword',
@@ -198,12 +199,21 @@ app.addHook('onRequest', async (req) => {
  * `frame-ancestors 'none'` is the clickjacking control, and it matters more
  * than it looks: SameSite=Lax treats every sibling app on the registrable
  * domain as same-site, so a framed page keeps its session cookie.
- * `X-Frame-Options` repeats it for anything that predates CSP level 2.
+ * `X-Frame-Options` repeats it for anything that predates CSP level 2. Both
+ * give way, to the configured origins only, when `DBK_FRAME_ANCESTORS` is set —
+ * `http/embed.ts` says why that is safe: a framed page receives no cookie, so
+ * it is logged out unless the student signed in inside that very frame.
  *
  * HSTS is emitted only when the public URL is https, so a plain-http
  * development instance cannot pin itself into being unreachable.
  */
 const HSTS = 'max-age=31536000; includeSubDomains';
+/**
+ * `'none'` unless an exam platform is configured (`http/embed.ts`). Both
+ * policies take it: a handbook linked from inside the exam frame would
+ * otherwise be the one page that refuses to open there.
+ */
+const FRAME_ANCESTORS = `frame-ancestors ${config.embed.frameAncestors.join(' ') || "'none'"}`;
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
@@ -243,7 +253,7 @@ const CSP = [
   "img-src 'self' data:",
   "connect-src 'self'",
   "form-action 'self'",
-  "frame-ancestors 'none'",
+  FRAME_ANCESTORS,
   "base-uri 'none'",
   "object-src 'none'",
 ].join('; ');
@@ -281,7 +291,7 @@ const HANDBOOK_CSP = [
   "img-src 'self' data:",
   "connect-src 'none'",
   "form-action 'none'",
-  "frame-ancestors 'none'",
+  FRAME_ANCESTORS,
   "base-uri 'none'",
   "object-src 'none'",
 ].join('; ');
@@ -305,7 +315,11 @@ app.addHook('onSend', async (req, reply) => {
     HANDBOOK_URLS.has(req.routeOptions.url ?? '') ? HANDBOOK_CSP : CSP,
   );
   void reply.header('x-content-type-options', 'nosniff');
-  void reply.header('x-frame-options', 'DENY');
+  // Only while nothing may frame us: the header has no allow-list form that a
+  // current browser honours (`ALLOW-FROM` is dead), so with an exam platform
+  // configured it would contradict the CSP — and old browsers that read only
+  // this header would refuse the frame the setting exists to allow.
+  if (config.embed.frameAncestors.length === 0) void reply.header('x-frame-options', 'DENY');
   void reply.header('referrer-policy', 'same-origin');
   if (config.session.secure) void reply.header('strict-transport-security', HSTS);
 

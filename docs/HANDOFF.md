@@ -2,12 +2,12 @@
 
 Running state document. Update it at the end of every working session.
 
-**Last updated:** 2026-09-26 · **Phases 0–10 are DEPLOYED**; the repo
-is on **`0.16.0`** — §29, a **teach migration** (`004_pass_ohne_ticket_typ.sql`,
-one `DROP COLUMN` on `tonspur.pass`), so the next deploy is §7's schema-change
-shape, not the code-only one; §29c is the runbook. Production read `0.15.2` on
-2026-09-26 before this session; `0.15.2` (§28) is the tab rename, deployed
-2026-09-11.
+**Last updated:** 2026-10-12 · **Phases 0–10 are DEPLOYED**; the repo
+is on **`0.17.0`** — §30, Exam.net can frame the app, **behind a new setting
+that is off by default** (`DBK_FRAME_ANCESTORS`); a framed page signs in with a
+bearer token instead of the cookie. Application code only, no
+migration; §30d is the runbook. **§20a was wrong** and §30 says how. Production
+read `0.16.0` (§29, deployed) on 2026-10-12.
 
 Before that: `0.15.1` — §26 and §27, both student-flow and both front end only, no
 migration. §26: the `/uebungen` card no longer dumps the whole task above its own
@@ -6150,6 +6150,13 @@ run under Safe Exam Browser. That investigation is §20a, because the answer is
 
 ### 20a. Exam.net cannot embed this app, and it must not be made able to
 
+> **Superseded by §30 (0.17.0).** The "route that works" below does not: the
+> author enabled Exam.net's advanced SEB features exactly as described and the
+> resource was *still* shown in an iframe, refused by `frame-ancestors`. Nothing
+> in Exam.net's documentation ever said it opens a separate window — that was
+> an inference, and it was written down as a finding. The three costs listed
+> are real; §30 avoids 2 and 3 entirely by not using a cookie in the frame.
+
 Exam.net's default for an external resource is an `<iframe>` in the student
 view, and its own support article's answer is "the site must allow embedding".
 This app refuses, deliberately, in two places that already carry the argument:
@@ -7225,3 +7232,95 @@ Dockerfile edit — the same argument as §21f.
 boot-log line in step 4 is what settles that, and `DROP COLUMN` on a 380-row
 table is not where a version difference would show.
 
+
+---
+
+## 30. Exam.net may frame the app — 0.17.0 (2026-10-12)
+
+The author put `https://datebaenkli.schaffner.xyz` into an Exam.net exam as an
+external resource with *Enable advanced features — only for use with SEB* on
+and "students can go to any available links", and SEB still showed Chromium's
+"refused to connect / open it in a new window" page. Exam.net frames the
+resource regardless of those settings, so §20a's advice was wrong (it now says
+so).
+
+### 30a. What was built — an embed mode that carries its own login
+
+Everything is behind **`DBK_FRAME_ANCESTORS`**; blank, the default, is
+byte-for-byte the old behaviour. When set (to `https://exam.net
+https://*.exam.net`):
+
+1. **`frame-ancestors`** lists those origins in both CSPs, and
+   `X-Frame-Options` is dropped (its allow-list form is dead in browsers).
+   `parseFrameAncestors` refuses `*`, `https:`, `http://…` and paths at boot.
+2. **A framed page does not use the cookie at all.** `assets/embed-auth.js`
+   detects `self !== top`, sends `x-dbk-embed: 1` on every `/api` call, and
+   keeps the token in `sessionStorage`, sending it back as
+   `Authorization: Bearer`. The server hands the token over in an
+   `x-dbk-token` response header **from inside `setSessionCookie` /
+   `clearSessionCookie`**, so login, demo, password change, logout and expiry
+   needed no route changes. The cookie still wins whenever it is present.
+
+The idea came from the author ("like YouTube's embed links"). YouTube's embed
+works because the video needs no login; this one works by carrying the login
+explicitly. No special URL turned out to be needed: **any Datebänkli link
+works framed**, including `/sql?uebung=<id>` with §20b's `?next=`.
+
+### 30b. Why this was chosen over the first draft
+
+The same session first built a second `SameSite=None; Partitioned` cookie,
+issued only to SEB and only on `Sec-Fetch-Site: same-origin`. It was never
+committed. It depended on WebKit (SEB on macOS/iPadOS) accepting a partitioned
+third-party cookie, which nobody could confirm; the header approach depends on
+no cookie policy at all, and on Mac/iPad that is the whole difference.
+
+Security, in short (`http/embed.ts` has it at length):
+- **Not CSRF-able:** a browser never attaches a header on another site's
+  behalf, and a custom header forces a preflight nothing here answers.
+- **No clickjacking of the ordinary app:** a framed page gets no Lax cookie, so
+  it is logged out unless the student signed in inside that very frame.
+- **The real cost:** the token is readable by script inside the frame, where
+  the cookie is `httpOnly`. Bounded by `script-src 'self'`, by the token being
+  given only to a request that asked with `x-dbk-embed`, and by
+  `sessionStorage` dying with the exam window. `res.headers["x-dbk-token"]` is
+  in the logger's `redact` list.
+
+### 30c. Verified
+
+- `test/embed.test.mjs` (pure): the origin parser, the bearer shape, `nextToken`,
+  `isFramed`.
+- **End to end on a throwaway cluster**, with `dist/http/embed.js`'s origin
+  regex patched *for that run only* to admit `http://127.0.0.1:3112` (the
+  parser rightly refuses http) and a fake exam page there framing
+  `http://localhost:3111` — a different *site*, so the browser treated it as
+  third-party. In the in-app browser (Chromium): framed page redirected to
+  `/login`; login held across navigation to `/password`; the password change
+  rotated the token and the frame followed; a reload of the outer page kept the
+  session; a separate top-level tab on the app was logged out with nothing in
+  its `sessionStorage`; logout inside the frame cleared it and a reload stayed
+  logged out. Over curl: no `x-dbk-token` on a login without `x-dbk-embed`, a
+  garbage bearer is 401, a logged-out token is 401, no token in the log.
+- **Not verified: SEB itself, on any platform, and WebKit at all.** Nothing in
+  the approach depends on WebKit's cookie rules, which is the point, but
+  `sessionStorage` in a third-party frame is the assumption to watch.
+
+### 30d. Known gap
+
+A plain `<a href="/api/…/download">` is a navigation and carries no header, so
+a student's "download my hand-in" link answers 401 inside the frame. SEB blocks
+downloads by default, so it was left; `embed-auth.js` says so at the top.
+
+### 30e. For the next session — deploy
+
+Application code only, no migration, **one `.env` addition**:
+
+```
+DBK_FRAME_ANCESTORS=https://exam.net https://*.exam.net
+```
+
+(`docker-compose.yml` passes it through, blank by default.) Then
+`git pull && docker compose build datebaenkli-app && docker compose up -d`,
+`curl /api/version` → `0.17.0`, and
+`curl -sI https://datebaenkli.schaffner.xyz/ | grep -i frame` must show the
+two origins and **no** `x-frame-options`. Then one student account in a trial
+Exam.net exam under SEB, on each platform the school uses.

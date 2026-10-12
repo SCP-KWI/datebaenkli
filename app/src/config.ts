@@ -8,6 +8,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseFrameAncestors } from './http/embed.js';
 
 const missing: string[] = [];
 
@@ -204,6 +205,22 @@ if (optional('NODE_ENV', 'development') === 'production' && !cookieSecure) {
   );
 }
 
+/**
+ * Who may frame the app, and therefore whether the framed session — a bearer
+ * token instead of the cookie — exists at all. Empty, the default, is
+ * `frame-ancestors 'none'` and no bearer path, exactly as before. `http/embed.ts` has the argument for what setting it
+ * relaxes and what it does not.
+ *
+ * A throw rather than a warning without https: the framed session is a bearer
+ * token in a header, and over plain http that is a password on a postcard.
+ * An https exam page cannot frame an http one anyway (mixed content), so the only
+ * deployment this refuses is one where the setting could not have worked.
+ */
+const frameAncestors = parseFrameAncestors(optional('DBK_FRAME_ANCESTORS', ''));
+if (frameAncestors.length > 0 && !cookieSecure) {
+  throw new Error('DBK_FRAME_ANCESTORS needs an https DBK_PUBLIC_URL.');
+}
+
 export const config = {
   env: optional('NODE_ENV', 'development'),
   isProduction: optional('NODE_ENV', 'development') === 'production',
@@ -394,6 +411,10 @@ export const config = {
      */
     absoluteTtlMs: int('DBK_SESSION_ABSOLUTE_TTL_HOURS', 24 * 7) * 3_600_000,
     secure: cookieSecure,
+  },
+
+  embed: {
+    frameAncestors,
   },
 
   i18n: {

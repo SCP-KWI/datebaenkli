@@ -26,6 +26,7 @@ import {
   type SessionUser,
 } from '../auth/session.js';
 import type { AppRole } from '../services/users.js';
+import { bearerToken } from './embed.js';
 import { HttpError, forbidden, unauthorized } from './errors.js';
 
 export interface AuthContext {
@@ -102,19 +103,51 @@ const COOKIE_OPTIONS = {
  */
 export function setSessionCookie(reply: FastifyReply, token: string, expiresAt: Date): void {
   reply.setCookie(config.session.cookieName, token, { ...COOKIE_OPTIONS, expires: expiresAt });
+  if (wantsToken(reply.request)) void reply.header(TOKEN_HEADER, token);
   reply.request.sessionKey = sessionFingerprint(token);
 }
 
 export function clearSessionCookie(reply: FastifyReply): void {
   reply.clearCookie(config.session.cookieName, { ...COOKIE_OPTIONS });
+  if (wantsToken(reply.request)) void reply.header(TOKEN_HEADER, TOKEN_CLEARED);
   reply.request.sessionKey = NO_SESSION;
 }
 
+/**
+ * The framed session (`http/embed.ts`). A page that cannot hold the cookie
+ * says so with `EMBED_HEADER`, and every response that sets or clears the
+ * cookie then *also* names the token in `TOKEN_HEADER` — which is the whole
+ * hand-over, because login, demo claim and password change all already go
+ * through the two functions above. `assets/embed-auth.js` is the other half.
+ *
+ * Only when asked, so an ordinary page never sees its own token in script and
+ * `httpOnly` keeps meaning what it says outside a frame. Only when configured,
+ * so a deployment that never set `DBK_FRAME_ANCESTORS` has no bearer path at
+ * all — not even a dormant one.
+ */
+export const EMBED_HEADER = 'x-dbk-embed';
+export const TOKEN_HEADER = 'x-dbk-token';
+/** Not empty: a proxy is free to drop an empty header, and "logged out" must arrive. */
+export const TOKEN_CLEARED = '-';
+
+const embedEnabled = config.embed.frameAncestors.length > 0;
+
+function wantsToken(req: FastifyRequest): boolean {
+  return embedEnabled && req.headers[EMBED_HEADER] === '1';
+}
+
+/**
+ * The cookie wins whenever it is present and valid; the bearer header is
+ * consulted only in its absence. Inside a frame the browser sends no cookie, so
+ * in practice exactly one of them is ever there.
+ */
 function readToken(req: FastifyRequest): string | null {
   const raw = req.cookies[config.session.cookieName];
-  if (raw === undefined) return null;
-  const unsigned = req.unsignCookie(raw);
-  return unsigned.valid && unsigned.value !== null ? unsigned.value : null;
+  if (raw !== undefined) {
+    const unsigned = req.unsignCookie(raw);
+    if (unsigned.valid && unsigned.value !== null) return unsigned.value;
+  }
+  return embedEnabled ? bearerToken(req.headers.authorization) : null;
 }
 
 export function registerAuthHooks(app: FastifyInstance, db: Db): void {

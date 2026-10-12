@@ -16,6 +16,7 @@
 
 // Relative, not `/assets/…`: `test/util.test.mjs` imports this module in Node,
 // where a root-absolute specifier resolves against the filesystem and fails.
+import { installEmbedAuth } from './embed-auth.js';
 import { installSessionGuard } from './session-guard.js';
 
 /**
@@ -31,7 +32,12 @@ import { installSessionGuard } from './session-guard.js';
  * `i18n.js` and `csv-import.js` — so there is exactly one install and no
  * seventh page can be added without it. Import evaluation runs before any
  * page's own top-level `fetch`, which is what makes even `/api/me` covered.
+ *
+ * `installEmbedAuth` first, so the guard wraps it: it does nothing outside an
+ * exam platform's frame, and inside one it is what carries the session at all
+ * (`embed-auth.js`). The guard must see a request that already has it.
  */
+installEmbedAuth();
 installSessionGuard();
 
 /**

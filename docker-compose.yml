@@ -155,6 +155,9 @@ services:
       # TLS-less first bring-up in HANDOFF §5, or the browser will refuse the
       # session cookie and every login will appear to succeed and then fail.
       DBK_COOKIE_SECURE: ${DBK_COOKIE_SECURE:-}
+      # Blank = no site may frame the app. "https://exam.net https://*.exam.net"
+      # to use it as an Exam.net resource; see .env.example.
+      DBK_FRAME_ANCESTORS: ${DBK_FRAME_ANCESTORS:-}
       # initial admin, created on first boot only if no admin exists
       DBK_BOOTSTRAP_ADMIN_USER: ${DBK_BOOTSTRAP_ADMIN_USER:-admin}
       # `:-` and NOT `:?`. The app tells you to blank this once you have logged

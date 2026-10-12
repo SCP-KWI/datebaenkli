@@ -191,6 +191,16 @@ bug. A guard that has to be remembered at the call site is not a guard. The
 server half (`http/auth.ts`, `409 session_switched`) holds whether or not this
 file does; do not delete one on the grounds that the other exists.
 
+**`embed-auth.js` is the sixth** (0.17.0) and the second fetch wrapper. It
+does nothing unless the page is inside a frame, which only an exam platform
+named in `DBK_FRAME_ANCESTORS` can make it; there it carries the session as a
+bearer token in `sessionStorage`, because a framed page gets no cookie
+(`http/embed.ts`, HANDOFF §30). `util.js` installs it *before* the session
+guard, so the guard wraps it. **It is the one place a session token is readable
+by script**, which is why it exists only in a frame and only when configured —
+do not reuse it as a way to give ordinary tabs a per-tab session; the argument
+against that is at the top of `session-guard.js`.
+
 **There is exactly one stylesheet, and one classic script** (phase 7).
 `assets/app.css` holds the shell above its banner comment and page-scoped rules
 below it; `assets/chalk-tokens.css` is a copy of the design system's tokens and
@@ -247,6 +257,7 @@ Three layers, and the split matters:
 | `test/search-path.test.mjs` | nothing — pure functions | the one list whose order decides which table an unqualified name reads. Three call sites build a path from it and a fourth ships it to the browser; the assertion that matters is that the caller's own schema is first in every one of them, because that is what a well-meaning "sort the shared schemas alphabetically" would quietly break |
 | `test/session-guard.test.mjs` | nothing — pure functions | one decision: whether this tab is still the session it rendered as. The `labelled` cases are where the browser's rule leans on the server's — a labelled request has already been checked against the cookie, which is the only reason a changed fingerprint on a 2xx may be followed |
 | `test/dialog.test.mjs` | nothing — a hand-rolled fake `<dialog>` | that a question is answered by its own click and not by the previous one's. The **only** thing the fake encodes is that `close()` *queues* its event while an `await` resumes on a microtask — the ordering that silently turned every two-step confirmation in the app into a no-op for four releases (§23). Its first draft passed against the broken code because it clicked too fast; the `drainTasks()` before the click is the test |
+| `test/embed.test.mjs` | nothing — pure functions | the framed session (HANDOFF §30): which origins `DBK_FRAME_ANCESTORS` accepts, the bearer header's shape, and `nextToken` — the one rule deciding whether a student inside an exam frame stays signed in. Every way of being wrong there is quiet, and only shows inside the frame |
 | `test/markdown.test.mjs` | nothing — pure functions | the task-text renderer. The safety block comes **first** in that file on purpose: every case in it is a way the escape-first rule could be broken by a well-meaning edit, and each would render identically to correct output in a browser |
 | `test/pages.test.mjs` | nothing — the HTML on disk | that the CSV dialog's markup is byte-identical in `sql.html` and `uebungen.html`, that both carry every id `csv-import.js` reaches for, and that no page has grown an inline script, handler or `style=` — which is the only thing that keeps `script-src 'self'` worth having |
 | `test/exercise.test.mjs` | migrated PGlite + a recording provisioner | the exercise bookkeeping: which schema name gets reserved, that a *second* open does not replay the fixtures over a student's work, what a take-back decides to drop, that attempts are assigned rather than derived, and what the download says |
